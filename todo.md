@@ -37,3 +37,8 @@
 ## Testes
 - [x] Testes vitest para endpoints de API
 - [x] Validação de fluxos de registro e autenticação
+
+## Melhorias
+- [x] Gerar URL automática para gravação NFC ao criar tag
+- [x] Exibir URL com botão de copiar na listagem de tags
+- [x] Adicionar QR Code da URL para facilitar gravação
