@@ -43,6 +43,9 @@ export default function NfcRegister() {
   const [formData, setFormData] = useState<FormData>({ name: "", email: "", phone: "" });
   const [isRegistered, setIsRegistered] = useState(false);
   const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
+  const [newUserData, setNewUserData] = useState<{ userId: number; tagId: number } | null>(null);
+  const [newUserCheckinDone, setNewUserCheckinDone] = useState(false);
+  const [newUserCheckinPending, setNewUserCheckinPending] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [location, setLocation] = useState<GeoLocation | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
@@ -68,15 +71,18 @@ export default function NfcRegister() {
 
   const registerMutation = trpc.nfcUsers.register.useMutation({
     onSuccess: (data) => {
+      setIsRegistered(true);
       if (data.isNewUser) {
-        setIsRegistered(true);
         toast.success("Registro realizado com sucesso!");
       } else {
         toast.success("Bem-vindo de volta!");
-        setIsRegistered(true);
       }
       if (data.redirectUrl) {
         setRedirectUrl(data.redirectUrl);
+      }
+      // Save user data for check-in after registration
+      if (data.user?.id && data.tagId) {
+        setNewUserData({ userId: data.user.id, tagId: data.tagId });
       }
     },
     onError: (error) => {
@@ -214,6 +220,56 @@ export default function NfcRegister() {
       return () => clearTimeout(timer);
     }
   }, [checkData, scheduleData, checkinAttempted]);
+
+  // Check-in after new user registration
+  useEffect(() => {
+    if (
+      isRegistered &&
+      newUserData &&
+      location &&
+      !newUserCheckinDone &&
+      !newUserCheckinPending
+    ) {
+      setNewUserCheckinPending(true);
+      // Trigger check-in for newly registered user
+      manualCheckinMutation.mutate({
+        tagId: newUserData.tagId,
+        nfcUserId: newUserData.userId,
+        latitude: location.latitude,
+        longitude: location.longitude,
+      }, {
+        onSuccess: (result) => {
+          setNewUserCheckinDone(true);
+          setNewUserCheckinPending(false);
+          if (result.isWithinRadius) {
+            toast.success(`Check-in realizado! Você está a ${result.distanceMeters}m (dentro do raio)`);
+          } else {
+            toast.warning(`Check-in registrado! Você está a ${result.distanceMeters}m (fora do raio)`);
+          }
+          // Redirect after check-in
+          if (redirectUrl) {
+            setTimeout(() => {
+              window.location.href = redirectUrl;
+            }, 2000);
+          }
+        },
+        onError: (error) => {
+          setNewUserCheckinPending(false);
+          if (error.message.includes('já fez check-in') || error.message.includes('Não há agendamento')) {
+            // No active schedule or already checked in - just redirect
+            setNewUserCheckinDone(true);
+            if (redirectUrl) {
+              setTimeout(() => {
+                window.location.href = redirectUrl;
+              }, 1500);
+            }
+          } else {
+            toast.error(error.message);
+          }
+        }
+      });
+    }
+  }, [isRegistered, newUserData, location, newUserCheckinDone, newUserCheckinPending, redirectUrl]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -446,8 +502,50 @@ export default function NfcRegister() {
     );
   }
 
-  // Registration completed - show app installation option
+  // Registration completed - processing check-in
   if (isRegistered) {
+    // Show check-in processing state
+    if (newUserCheckinPending) {
+      return (
+        <div className="min-h-screen bg-white flex items-center justify-center p-4">
+          <div className="text-center">
+            <div className="w-20 h-20 bg-green-600 flex items-center justify-center mx-auto mb-6">
+              <Loader2 className="w-12 h-12 text-white animate-spin" />
+            </div>
+            <h2 className="mb-2">Registrando presença...</h2>
+            <p className="text-gray-500">Aguarde um momento</p>
+          </div>
+        </div>
+      );
+    }
+
+    // Check-in done - show success and redirect
+    if (newUserCheckinDone) {
+      return (
+        <div className="min-h-screen bg-white flex items-center justify-center p-4">
+          <div className="border-4 border-green-600 p-8 md:p-12 brutal-shadow max-w-md w-full text-center bg-green-50">
+            <div className="w-20 h-20 bg-green-600 flex items-center justify-center mx-auto mb-6">
+              <CheckCircle className="w-12 h-12 text-white" />
+            </div>
+            <h2 className="mb-2 text-green-800">Registro e Check-in Concluídos!</h2>
+            <p className="text-gray-600 mb-4">
+              Seu cadastro foi realizado e sua presença foi registrada.
+            </p>
+            {redirectUrl && (
+              <>
+                <p className="text-sm text-gray-500 mb-4">Redirecionando...</p>
+                <Loader2 className="w-6 h-6 animate-spin mx-auto text-green-600" />
+              </>
+            )}
+            {!redirectUrl && (
+              <p className="text-sm text-gray-500">Você pode fechar esta página.</p>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // Waiting for location to do check-in
     const appUrl = `/app?uid=${tagUid}${redirectUrl ? `&redirect=${encodeURIComponent(redirectUrl)}` : ''}`;
     
     return (
@@ -463,6 +561,22 @@ export default function NfcRegister() {
               : "Bem-vindo de volta! Sua conexão foi registrada."
             }
           </p>
+          
+          {!location && (
+            <div className="bg-yellow-50 border-4 border-yellow-500 p-4 mb-6 text-left">
+              <div className="flex items-start gap-3">
+                <div className="w-12 h-12 bg-yellow-500 flex items-center justify-center shrink-0">
+                  <MapPin className="w-7 h-7 text-white" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm mb-1 text-yellow-800">AGUARDANDO LOCALIZAÇÃO</h4>
+                  <p className="text-xs text-gray-700">
+                    Permita o acesso à sua localização para registrar sua presença automaticamente.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
           
           <div className="bg-blue-50 border-4 border-blue-600 p-4 mb-6 text-left">
             <div className="flex items-start gap-3">

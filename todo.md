@@ -150,3 +150,7 @@
 - [x] Fazer check-in automático quando usuário lê tag NFC (se houver agendamento ativo)
 - [x] Redirecionar para o link configurado após o check-in
 - [x] Manter fluxo funcionando mesmo sem agendamento ativo (apenas redireciona)
+
+## Correção do Fluxo de Check-in
+- [x] Usuário já cadastrado: fazer check-in automático ao acessar tag NFC
+- [x] Usuário novo: fazer check-in automático após completar cadastro

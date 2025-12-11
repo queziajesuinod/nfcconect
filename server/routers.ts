@@ -252,6 +252,7 @@ export const appRouter = router({
             return { 
               isNewUser: false, 
               user: existingUser,
+              tagId: tag.id,
               redirectUrl: tag.redirectUrl 
             };
           } else {
@@ -273,6 +274,7 @@ export const appRouter = router({
             return { 
               isNewUser: false, // User already has data, just connected to new tag
               user: existingUser,
+              tagId: tag.id,
               redirectUrl: tag.redirectUrl 
             };
           }
@@ -312,6 +314,7 @@ export const appRouter = router({
         return { 
           isNewUser: true, 
           user: newUser,
+          tagId: tag.id,
           redirectUrl: tag.redirectUrl 
         };
       }),
