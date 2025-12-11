@@ -14,7 +14,9 @@ import {
   Radio,
   User,
   Phone,
-  Mail
+  Mail,
+  Smartphone,
+  Zap
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -248,8 +250,17 @@ function RealtimePanelContent() {
                       </div>
                       <div className="text-right">
                         <div className="flex items-center gap-2">
-                          <Badge variant={checkin.type === 'manual' ? 'default' : 'secondary'}>
-                            {checkin.type === 'manual' ? 'Manual' : 'Auto'}
+                          <Badge 
+                            variant={checkin.type === 'manual' ? 'default' : 'secondary'}
+                            className={checkin.type === 'manual' 
+                              ? 'bg-blue-600 hover:bg-blue-700 flex items-center gap-1' 
+                              : 'bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-1'
+                            }
+                          >
+                            {checkin.type === 'manual' 
+                              ? <><Smartphone className="w-3 h-3" /> NFC</>
+                              : <><Zap className="w-3 h-3" /> Auto</>
+                            }
                           </Badge>
                           <Badge variant={checkin.isWithinRadius ? 'default' : 'outline'} 
                             className={checkin.isWithinRadius ? 'bg-green-600' : 'text-yellow-600 border-yellow-500'}>
@@ -294,8 +305,18 @@ function RealtimePanelContent() {
                     <span className="text-sm text-gray-500">{checkin.tagName || checkin.tagUid}</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm">
-                    <Badge variant="outline" className="text-xs">
-                      {checkin.type === 'manual' ? 'Manual' : 'Auto'}
+                    <Badge 
+                      variant="outline" 
+                      className={`text-xs flex items-center gap-1 ${
+                        checkin.type === 'manual' 
+                          ? 'border-blue-600 text-blue-600' 
+                          : 'border-purple-600 text-purple-600'
+                      }`}
+                    >
+                      {checkin.type === 'manual' 
+                        ? <><Smartphone className="w-3 h-3" /> NFC</>
+                        : <><Zap className="w-3 h-3" /> Auto</>
+                      }
                     </Badge>
                     <span className="text-gray-500">
                       {new Date(checkin.createdAt).toLocaleTimeString('pt-BR')}

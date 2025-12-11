@@ -163,3 +163,7 @@
 - [x] Quando usuário já cadastrado conecta em nova tag, reconhecer pelo deviceId
 - [x] Criar relação usuário-tag automaticamente sem pedir registro
 - [x] Fazer check-in automático para usuário reconhecido
+
+## Indicador Visual de Tipo de Check-in
+- [x] Adicionar badge/ícone para diferenciar check-in manual (NFC) do automático
+- [x] Mostrar indicador no painel em tempo real
