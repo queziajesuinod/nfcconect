@@ -2,8 +2,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
-import { Nfc, CheckCircle, ArrowRight, Loader2, AlertCircle, MapPin, Smartphone, Download, Clock, Hand } from "lucide-react";
-import { useState, useEffect } from "react";
+import { Nfc, CheckCircle, ArrowRight, Loader2, AlertCircle, MapPin, Download } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
 import { useSearch } from "wouter";
 import { toast } from "sonner";
 
@@ -24,7 +24,6 @@ function getDeviceId(): string {
   const DEVICE_ID_KEY = 'nfc_device_id';
   let deviceId = localStorage.getItem(DEVICE_ID_KEY);
   if (!deviceId) {
-    // Generate a unique ID using crypto API or fallback
     deviceId = crypto.randomUUID ? crypto.randomUUID() : 
       'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
         const r = Math.random() * 16 | 0;
@@ -49,9 +48,11 @@ export default function NfcRegister() {
   const [locationError, setLocationError] = useState<string | null>(null);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   const [checkinDone, setCheckinDone] = useState(false);
+  const [checkinAttempted, setCheckinAttempted] = useState(false);
+  const [autoCheckinStatus, setAutoCheckinStatus] = useState<'pending' | 'success' | 'failed' | 'no-schedule'>('pending');
   
-  // Get unique device ID
   const deviceId = getDeviceId();
+  const autoCheckinTriggered = useRef(false);
 
   // Check if user already exists for this tag AND device
   const { data: checkData, isLoading: isChecking, error: checkError } = trpc.nfcUsers.checkByTagUid.useQuery(
@@ -86,23 +87,49 @@ export default function NfcRegister() {
   const manualCheckinMutation = trpc.checkins.manualCheckin.useMutation({
     onSuccess: (result) => {
       setCheckinDone(true);
+      setAutoCheckinStatus('success');
       if (result.isWithinRadius) {
         toast.success(`Check-in realizado! Você está a ${result.distanceMeters}m (dentro do raio)`);
       } else {
-        toast.warning(`Check-in registrado, mas você está a ${result.distanceMeters}m (fora do raio de ${result.radiusMeters}m)`);
+        toast.warning(`Check-in registrado! Você está a ${result.distanceMeters}m (fora do raio)`);
+      }
+      // Auto-redirect after successful check-in
+      if (checkData?.redirectUrl) {
+        setTimeout(() => {
+          window.location.href = checkData.redirectUrl!;
+        }, 2000);
       }
     },
     onError: (error) => {
-      toast.error(error.message);
+      setAutoCheckinStatus('failed');
+      // If check-in fails (e.g., already checked in), still redirect
+      if (error.message.includes('já fez check-in')) {
+        toast.info("Você já fez check-in hoje!");
+        setCheckinDone(true);
+        if (checkData?.redirectUrl) {
+          setTimeout(() => {
+            window.location.href = checkData.redirectUrl!;
+          }, 1500);
+        }
+      } else {
+        toast.error(error.message);
+      }
     },
   });
 
-  // Request geolocation on mount
+  // Request geolocation on mount for existing users
   useEffect(() => {
-    if (!checkData?.exists && tagUid) {
+    if (checkData?.exists && tagUid) {
       requestLocation();
     }
   }, [checkData, tagUid]);
+
+  // Request geolocation for new users
+  useEffect(() => {
+    if (!checkData?.exists && tagUid && !isChecking) {
+      requestLocation();
+    }
+  }, [checkData, tagUid, isChecking]);
 
   const requestLocation = () => {
     if (!navigator.geolocation) {
@@ -146,37 +173,47 @@ export default function NfcRegister() {
     );
   };
 
-  // Auto-redirect if user already exists
+  // AUTO CHECK-IN: When user exists, has location, and there's an active schedule
   useEffect(() => {
-    if (checkData?.exists && checkData.redirectUrl) {
-      // Don't auto-redirect if there's an active schedule - let user do check-in first
-      if (!scheduleData?.hasActiveSchedule) {
-        setIsRedirecting(true);
-        const timer = setTimeout(() => {
-          window.location.href = checkData.redirectUrl!;
-        }, 1500);
-        return () => clearTimeout(timer);
-      }
+    if (
+      checkData?.exists && 
+      checkData?.tag?.id && 
+      checkData?.user?.id && 
+      location && 
+      scheduleData?.hasActiveSchedule && 
+      !checkinAttempted &&
+      !autoCheckinTriggered.current
+    ) {
+      autoCheckinTriggered.current = true;
+      setCheckinAttempted(true);
+      
+      // Trigger automatic check-in
+      manualCheckinMutation.mutate({
+        tagId: checkData.tag.id,
+        nfcUserId: checkData.user.id,
+        latitude: location.latitude,
+        longitude: location.longitude,
+      });
     }
-  }, [checkData, scheduleData]);
+  }, [checkData, location, scheduleData, checkinAttempted]);
 
-  const handleManualCheckin = () => {
-    if (!checkData?.tag?.id || !checkData?.user?.id) {
-      toast.error("Dados não encontrados");
-      return;
+  // If no active schedule, redirect directly
+  useEffect(() => {
+    if (
+      checkData?.exists && 
+      checkData?.redirectUrl && 
+      scheduleData !== undefined && 
+      !scheduleData?.hasActiveSchedule &&
+      !checkinAttempted
+    ) {
+      setAutoCheckinStatus('no-schedule');
+      setIsRedirecting(true);
+      const timer = setTimeout(() => {
+        window.location.href = checkData.redirectUrl!;
+      }, 1500);
+      return () => clearTimeout(timer);
     }
-    if (!location) {
-      toast.error("Localização é obrigatória para check-in!");
-      requestLocation();
-      return;
-    }
-    manualCheckinMutation.mutate({
-      tagId: checkData.tag.id,
-      nfcUserId: checkData.user.id,
-      latitude: location.latitude,
-      longitude: location.longitude,
-    });
-  };
+  }, [checkData, scheduleData, checkinAttempted]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -271,149 +308,107 @@ export default function NfcRegister() {
     );
   }
 
-  // User exists - show check-in option if schedule is active
+  // User exists - Processing check-in and redirect
   if (checkData?.exists) {
-    // If there's an active schedule, show check-in option
-    if (scheduleData?.hasActiveSchedule && !checkinDone) {
+    // Getting location for check-in
+    if (isGettingLocation || (!location && !locationError)) {
       return (
         <div className="min-h-screen bg-white flex items-center justify-center p-4">
-          <div className="border-4 border-black p-8 md:p-12 brutal-shadow max-w-md w-full">
-            <div className="text-center mb-6">
-              <div className="w-20 h-20 bg-green-600 flex items-center justify-center mx-auto mb-6">
-                <CheckCircle className="w-12 h-12 text-white" />
-              </div>
-              <h2 className="mb-2">Bem-vindo de volta!</h2>
-              <p className="text-gray-500">
-                {checkData.user?.name ? `Olá, ${checkData.user.name}!` : "Conexão registrada."}
-              </p>
+          <div className="text-center">
+            <div className="w-20 h-20 bg-blue-600 flex items-center justify-center mx-auto mb-6">
+              <MapPin className="w-12 h-12 text-white animate-pulse" />
             </div>
-
-            {/* Active Schedule - Check-in Option */}
-            <div className="bg-blue-50 border-4 border-blue-600 p-4 mb-6">
-              <div className="flex items-center gap-3 mb-3">
-                <Clock className="w-6 h-6 text-blue-600" />
-                <div>
-                  <h4 className="font-bold text-blue-800">AGENDAMENTO ATIVO</h4>
-                  <p className="text-sm text-gray-600">
-                    {scheduleData.schedule?.name || "Check-in disponível"}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    Período: {scheduleData.schedule?.startTime} - {scheduleData.schedule?.endTime}
-                  </p>
-                  <p className="text-xs text-gray-400">
-                    Horário atual: {scheduleData.currentTime}
-                  </p>
-                </div>
-              </div>
-
-              {/* Location Status */}
-              <div className="mb-4 p-3 bg-white border-2 border-gray-200">
-                <div className="flex items-center gap-3">
-                  <MapPin className="w-5 h-5 text-gray-600" />
-                  <div className="flex-1">
-                    {isGettingLocation ? (
-                      <div className="flex items-center gap-2">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span className="text-sm text-gray-600">Obtendo localização...</span>
-                      </div>
-                    ) : location ? (
-                      <div>
-                        <span className="text-sm text-green-600 font-medium">Localização capturada</span>
-                        <p className="text-xs text-gray-500">
-                          Precisão: ~{Math.round(location.accuracy)}m
-                        </p>
-                      </div>
-                    ) : locationError ? (
-                      <div>
-                        <span className="text-sm text-red-600">{locationError}</span>
-                        <button 
-                          onClick={requestLocation}
-                          className="text-xs text-blue-600 underline ml-2"
-                        >
-                          Tentar novamente
-                        </button>
-                      </div>
-                    ) : (
-                      <button 
-                        onClick={requestLocation}
-                        className="text-sm text-blue-600 underline"
-                      >
-                        Permitir localização
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <Button 
-                onClick={handleManualCheckin}
-                disabled={manualCheckinMutation.isPending || !location}
-                className="w-full bg-blue-600 hover:bg-blue-700 font-bold text-lg py-6 h-auto"
-              >
-                {manualCheckinMutation.isPending ? (
-                  <>
-                    <Loader2 className="mr-2 w-5 h-5 animate-spin" /> Registrando...
-                  </>
-                ) : (
-                  <>
-                    <Hand className="mr-2 w-5 h-5" /> FAZER CHECK-IN
-                  </>
-                )}
-              </Button>
-            </div>
-
-            {checkData.redirectUrl && (
-              <Button 
-                variant="outline"
-                onClick={handleRedirect}
-                className="w-full border-2 border-black hover:bg-gray-100 font-bold"
-              >
-                Pular e continuar <ArrowRight className="ml-2 w-5 h-5" />
-              </Button>
-            )}
-
-            {!checkData.redirectUrl && (
-              <p className="text-sm text-gray-500 text-center">
-                Ou você pode fechar esta página.
-              </p>
-            )}
+            <h2 className="mb-2">Obtendo localização...</h2>
+            <p className="text-gray-500">
+              {checkData.user?.name ? `Olá, ${checkData.user.name}!` : "Bem-vindo de volta!"}
+            </p>
+            <p className="text-sm text-gray-400 mt-2">Permita o acesso à sua localização</p>
           </div>
         </div>
       );
     }
 
-    // Check-in completed
-    if (checkinDone) {
+    // Location error - show option to continue without check-in
+    if (locationError && !checkinDone) {
       return (
         <div className="min-h-screen bg-white flex items-center justify-center p-4">
           <div className="border-4 border-black p-8 md:p-12 brutal-shadow max-w-md w-full text-center">
+            <div className="w-20 h-20 bg-yellow-500 flex items-center justify-center mx-auto mb-6">
+              <MapPin className="w-12 h-12 text-white" />
+            </div>
+            <h2 className="mb-2">Bem-vindo de volta!</h2>
+            <p className="text-gray-500 mb-4">
+              {checkData.user?.name ? `Olá, ${checkData.user.name}!` : ""}
+            </p>
+            <p className="text-sm text-red-600 mb-4">{locationError}</p>
+            <div className="space-y-3">
+              <Button 
+                onClick={requestLocation}
+                variant="outline"
+                className="w-full border-2 border-black"
+              >
+                <MapPin className="w-4 h-4 mr-2" />
+                Tentar novamente
+              </Button>
+              {checkData.redirectUrl && (
+                <Button 
+                  onClick={handleRedirect}
+                  className="w-full"
+                >
+                  Continuar sem check-in <ArrowRight className="ml-2 w-4 h-4" />
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Processing check-in
+    if (manualCheckinMutation.isPending) {
+      return (
+        <div className="min-h-screen bg-white flex items-center justify-center p-4">
+          <div className="text-center">
+            <div className="w-20 h-20 bg-green-600 flex items-center justify-center mx-auto mb-6">
+              <Loader2 className="w-12 h-12 text-white animate-spin" />
+            </div>
+            <h2 className="mb-2">Registrando presença...</h2>
+            <p className="text-gray-500">
+              {checkData.user?.name ? `${checkData.user.name}` : "Aguarde"}
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    // Check-in completed - show success and redirect
+    if (checkinDone) {
+      return (
+        <div className="min-h-screen bg-white flex items-center justify-center p-4">
+          <div className="border-4 border-green-600 p-8 md:p-12 brutal-shadow max-w-md w-full text-center bg-green-50">
             <div className="w-20 h-20 bg-green-600 flex items-center justify-center mx-auto mb-6">
               <CheckCircle className="w-12 h-12 text-white" />
             </div>
-            <h2 className="mb-4">Check-in Realizado!</h2>
-            <p className="text-gray-600 mb-6">
-              Sua presença foi registrada com sucesso.
+            <h2 className="mb-2 text-green-800">Check-in Realizado!</h2>
+            <p className="text-gray-600 mb-4">
+              {checkData.user?.name ? `${checkData.user.name}, sua presença foi registrada.` : "Sua presença foi registrada."}
             </p>
-            
-            {checkData.redirectUrl ? (
-              <Button 
-                onClick={handleRedirect}
-                className="w-full brutal-shadow-sm hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all font-bold uppercase text-lg py-6 h-auto"
-              >
-                Continuar <ArrowRight className="ml-2 w-5 h-5" />
-              </Button>
-            ) : (
-              <p className="text-sm text-gray-500">
-                Você pode fechar esta página.
-              </p>
+            {checkData.redirectUrl && (
+              <>
+                <p className="text-sm text-gray-500 mb-4">Redirecionando...</p>
+                <Loader2 className="w-6 h-6 animate-spin mx-auto text-green-600" />
+              </>
+            )}
+            {!checkData.redirectUrl && (
+              <p className="text-sm text-gray-500">Você pode fechar esta página.</p>
             )}
           </div>
         </div>
       );
     }
 
-    // User exists, redirecting (no active schedule)
-    if (isRedirecting) {
+    // No active schedule - redirecting directly
+    if (isRedirecting || autoCheckinStatus === 'no-schedule') {
       return (
         <div className="min-h-screen bg-white flex items-center justify-center p-4">
           <div className="text-center">
@@ -437,30 +432,24 @@ export default function NfcRegister() {
       );
     }
 
-    // User exists but no redirect URL and no active schedule
+    // Waiting for schedule data or location
     return (
       <div className="min-h-screen bg-white flex items-center justify-center p-4">
-        <div className="border-4 border-black p-8 md:p-12 brutal-shadow max-w-md w-full text-center">
-          <div className="w-20 h-20 bg-green-600 flex items-center justify-center mx-auto mb-6">
-            <CheckCircle className="w-12 h-12 text-white" />
+        <div className="text-center">
+          <div className="w-20 h-20 bg-black flex items-center justify-center mx-auto mb-6">
+            <Loader2 className="w-12 h-12 text-white animate-spin" />
           </div>
-          <h2 className="mb-4">Bem-vindo de volta!</h2>
-          <p className="text-gray-600 mb-2">
-            {checkData.user?.name ? `Olá, ${checkData.user.name}!` : "Sua conexão foi registrada."}
-          </p>
-          <p className="text-sm text-gray-500">
-            Você pode fechar esta página.
-          </p>
+          <h2 className="mb-2">Processando...</h2>
+          <p className="text-gray-500">Aguarde um momento</p>
         </div>
       </div>
     );
   }
 
-  // Registration completed
+  // Registration completed - show app installation option
   if (isRegistered) {
     const appUrl = `/app?uid=${tagUid}${redirectUrl ? `&redirect=${encodeURIComponent(redirectUrl)}` : ''}`;
     
-    // Always show app installation option first
     return (
       <div className="min-h-screen bg-white flex items-center justify-center p-4">
         <div className="border-4 border-black p-8 md:p-12 brutal-shadow max-w-md w-full text-center">
@@ -475,7 +464,6 @@ export default function NfcRegister() {
             }
           </p>
           
-          {/* App Installation Card - IMPORTANT */}
           <div className="bg-blue-50 border-4 border-blue-600 p-4 mb-6 text-left">
             <div className="flex items-start gap-3">
               <div className="w-12 h-12 bg-blue-600 flex items-center justify-center shrink-0">
@@ -520,7 +508,6 @@ export default function NfcRegister() {
   // New user - show registration form
   return (
     <div className="min-h-screen bg-white">
-      {/* Header */}
       <header className="border-b-4 border-black">
         <div className="container py-4 flex items-center gap-3">
           <div className="w-10 h-10 bg-black flex items-center justify-center">
@@ -530,11 +517,9 @@ export default function NfcRegister() {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="container py-12 md:py-20">
         <div className="max-w-lg mx-auto">
           <div className="border-4 border-black brutal-shadow">
-            {/* Card Header */}
             <div className="bg-black text-white p-6">
               <div className="flex items-center gap-4 mb-4">
                 <div className="w-14 h-14 bg-white flex items-center justify-center">
@@ -547,14 +532,12 @@ export default function NfcRegister() {
               </div>
             </div>
             
-            {/* Card Body */}
             <div className="p-6 md:p-8">
               <p className="text-gray-600 mb-6">
                 Esta é sua primeira conexão com esta tag NFC. 
                 Preencha seus dados para se registrar (opcional).
               </p>
 
-              {/* Location Status */}
               <div className="mb-6 p-4 border-2 border-gray-200 bg-gray-50">
                 <div className="flex items-center gap-3">
                   <MapPin className="w-5 h-5 text-gray-600" />

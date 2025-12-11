@@ -144,3 +144,9 @@
 - [x] Mostrar lista de quem já fez check-in com status (dentro/fora do raio)
 - [x] Mostrar estatísticas do agendamento ativo (total esperado vs presentes)
 - [x] Adicionar link no menu do dashboard
+
+## Fluxo de Check-in Automático na Leitura NFC
+- [x] Tornar endpoint de check-in manual público (sem necessidade de login)
+- [x] Fazer check-in automático quando usuário lê tag NFC (se houver agendamento ativo)
+- [x] Redirecionar para o link configurado após o check-in
+- [x] Manter fluxo funcionando mesmo sem agendamento ativo (apenas redireciona)
