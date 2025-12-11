@@ -109,6 +109,41 @@ export const appRouter = router({
         return getNfcUserByTagId(input.tagId);
       }),
 
+    // Check if user exists for a tag UID (public - for auto-redirect)
+    checkByTagUid: publicProcedure
+      .input(z.object({ tagUid: z.string() }))
+      .query(async ({ input, ctx }) => {
+        const tag = await getNfcTagByUid(input.tagUid);
+        if (!tag) {
+          return { exists: false, tag: null, user: null, redirectUrl: null };
+        }
+        
+        if (tag.status === 'blocked') {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Esta tag está bloqueada' });
+        }
+        
+        const existingUser = await getNfcUserByTagId(tag.id);
+        if (existingUser) {
+          // Update last connection and log
+          await updateNfcUser(existingUser.id, { lastConnectionAt: new Date() });
+          await createConnectionLog({
+            tagId: tag.id,
+            nfcUserId: existingUser.id,
+            action: 'redirect',
+            ipAddress: ctx.req.ip || ctx.req.headers['x-forwarded-for'] as string || null,
+            userAgent: ctx.req.headers['user-agent'] || null,
+          });
+          return { 
+            exists: true, 
+            tag, 
+            user: existingUser, 
+            redirectUrl: tag.redirectUrl 
+          };
+        }
+        
+        return { exists: false, tag, user: null, redirectUrl: null };
+      }),
+
     // Public endpoint for first NFC connection registration
     register: publicProcedure
       .input(z.object({

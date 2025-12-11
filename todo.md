@@ -42,3 +42,4 @@
 - [x] Gerar URL automática para gravação NFC ao criar tag
 - [x] Exibir URL com botão de copiar na listagem de tags
 - [x] Adicionar QR Code da URL para facilitar gravação
+- [x] Redirecionar usuários já cadastrados diretamente sem mostrar tela de registro

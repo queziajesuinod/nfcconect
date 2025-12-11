@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
-import { Nfc, CheckCircle, ArrowRight, Loader2 } from "lucide-react";
+import { Nfc, CheckCircle, ArrowRight, Loader2, AlertCircle } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useSearch } from "wouter";
 import { toast } from "sonner";
@@ -21,6 +21,13 @@ export default function NfcRegister() {
   const [formData, setFormData] = useState<FormData>({ name: "", email: "", phone: "" });
   const [isRegistered, setIsRegistered] = useState(false);
   const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
+  const [isRedirecting, setIsRedirecting] = useState(false);
+
+  // Check if user already exists for this tag
+  const { data: checkData, isLoading: isChecking, error: checkError } = trpc.nfcUsers.checkByTagUid.useQuery(
+    { tagUid },
+    { enabled: !!tagUid }
+  );
 
   const registerMutation = trpc.nfcUsers.register.useMutation({
     onSuccess: (data) => {
@@ -39,6 +46,18 @@ export default function NfcRegister() {
       toast.error(error.message);
     },
   });
+
+  // Auto-redirect if user already exists
+  useEffect(() => {
+    if (checkData?.exists && checkData.redirectUrl) {
+      setIsRedirecting(true);
+      // Small delay for UX feedback
+      const timer = setTimeout(() => {
+        window.location.href = checkData.redirectUrl!;
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [checkData]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,17 +81,7 @@ export default function NfcRegister() {
     }
   };
 
-  // Auto-register if no form needed (quick scan)
-  useEffect(() => {
-    if (tagUid && params.get("auto") === "true") {
-      registerMutation.mutate({
-        tagUid,
-        userAgent: navigator.userAgent,
-        deviceInfo: `${navigator.platform} - ${navigator.language}`,
-      });
-    }
-  }, [tagUid]);
-
+  // No UID provided
   if (!tagUid) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center p-4">
@@ -90,6 +99,84 @@ export default function NfcRegister() {
     );
   }
 
+  // Loading - checking if user exists
+  if (isChecking) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center p-4">
+        <div className="text-center">
+          <div className="w-20 h-20 bg-black flex items-center justify-center mx-auto mb-6">
+            <Loader2 className="w-12 h-12 text-white animate-spin" />
+          </div>
+          <h2 className="mb-2">Verificando...</h2>
+          <p className="text-gray-500">Aguarde um momento</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error checking tag
+  if (checkError) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center p-4">
+        <div className="border-4 border-black p-8 md:p-12 brutal-shadow max-w-md w-full text-center">
+          <div className="w-20 h-20 bg-red-600 flex items-center justify-center mx-auto mb-6">
+            <AlertCircle className="w-12 h-12 text-white" />
+          </div>
+          <h2 className="mb-4">Erro</h2>
+          <p className="text-gray-600">
+            {checkError.message || "Não foi possível verificar esta tag."}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // User exists - redirecting automatically
+  if (checkData?.exists && isRedirecting) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center p-4">
+        <div className="text-center">
+          <div className="w-20 h-20 bg-green-600 flex items-center justify-center mx-auto mb-6">
+            <CheckCircle className="w-12 h-12 text-white" />
+          </div>
+          <h2 className="mb-2">Bem-vindo de volta!</h2>
+          <p className="text-gray-500 mb-4">
+            {checkData.user?.name ? `Olá, ${checkData.user.name}!` : "Conexão registrada."}
+          </p>
+          {checkData.redirectUrl ? (
+            <>
+              <p className="text-sm text-gray-400 mb-4">Redirecionando...</p>
+              <Loader2 className="w-6 h-6 animate-spin mx-auto text-gray-400" />
+            </>
+          ) : (
+            <p className="text-sm text-gray-500">Você pode fechar esta página.</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // User exists but no redirect URL
+  if (checkData?.exists && !checkData.redirectUrl) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center p-4">
+        <div className="border-4 border-black p-8 md:p-12 brutal-shadow max-w-md w-full text-center">
+          <div className="w-20 h-20 bg-green-600 flex items-center justify-center mx-auto mb-6">
+            <CheckCircle className="w-12 h-12 text-white" />
+          </div>
+          <h2 className="mb-4">Bem-vindo de volta!</h2>
+          <p className="text-gray-600 mb-2">
+            {checkData.user?.name ? `Olá, ${checkData.user.name}!` : "Sua conexão foi registrada."}
+          </p>
+          <p className="text-sm text-gray-500">
+            Você pode fechar esta página.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Registration completed
   if (isRegistered) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center p-4">
@@ -122,6 +209,7 @@ export default function NfcRegister() {
     );
   }
 
+  // New user - show registration form
   return (
     <div className="min-h-screen bg-white">
       {/* Header */}
