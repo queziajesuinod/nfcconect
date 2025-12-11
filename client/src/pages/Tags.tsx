@@ -2,6 +2,7 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -27,7 +28,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { trpc } from "@/lib/trpc";
-import { Plus, Pencil, Trash2, Nfc, ExternalLink, Copy, QrCode } from "lucide-react";
+import { Plus, Pencil, Trash2, Nfc, ExternalLink, Copy, QrCode, MapPin, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -39,6 +40,10 @@ interface TagFormData {
   description: string;
   status: TagStatus;
   redirectUrl: string;
+  latitude: string;
+  longitude: string;
+  radiusMeters: number;
+  enableCheckin: boolean;
 }
 
 const initialFormData: TagFormData = {
@@ -47,6 +52,10 @@ const initialFormData: TagFormData = {
   description: "",
   status: "active",
   redirectUrl: "",
+  latitude: "",
+  longitude: "",
+  radiusMeters: 100,
+  enableCheckin: false,
 };
 
 export default function Tags() {
@@ -58,6 +67,7 @@ export default function Tags() {
   const [editId, setEditId] = useState<number | null>(null);
   const [selectedTagUrl, setSelectedTagUrl] = useState<string>("");
   const [selectedTagName, setSelectedTagName] = useState<string>("");
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
 
   const utils = trpc.useUtils();
   const { data: tags, isLoading } = trpc.tags.list.useQuery();
@@ -111,6 +121,10 @@ export default function Tags() {
       description: formData.description || undefined,
       status: formData.status,
       redirectUrl: formData.redirectUrl || undefined,
+      latitude: formData.latitude || undefined,
+      longitude: formData.longitude || undefined,
+      radiusMeters: formData.radiusMeters || undefined,
+      enableCheckin: formData.enableCheckin,
     });
   };
 
@@ -121,6 +135,10 @@ export default function Tags() {
       description: tag.description || "",
       status: tag.status,
       redirectUrl: tag.redirectUrl || "",
+      latitude: tag.latitude || "",
+      longitude: tag.longitude || "",
+      radiusMeters: tag.radiusMeters || 100,
+      enableCheckin: tag.enableCheckin || false,
     });
     setEditId(tag.id);
     setIsEditOpen(true);
@@ -134,7 +152,36 @@ export default function Tags() {
       description: formData.description || undefined,
       status: formData.status,
       redirectUrl: formData.redirectUrl || undefined,
+      latitude: formData.latitude || undefined,
+      longitude: formData.longitude || undefined,
+      radiusMeters: formData.radiusMeters || undefined,
+      enableCheckin: formData.enableCheckin,
     });
+  };
+
+  // Get current location
+  const getCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error("Geolocalização não suportada");
+      return;
+    }
+    setIsGettingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setFormData({
+          ...formData,
+          latitude: position.coords.latitude.toString(),
+          longitude: position.coords.longitude.toString(),
+        });
+        setIsGettingLocation(false);
+        toast.success("Localização capturada!");
+      },
+      (error) => {
+        setIsGettingLocation(false);
+        toast.error("Erro ao obter localização: " + error.message);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
   };
 
   // Gera a URL para gravação NFC
@@ -180,6 +227,83 @@ export default function Tags() {
     );
   };
 
+  // Location form fields component
+  const LocationFields = () => (
+    <div className="border-2 border-gray-300 p-4 mt-4 bg-gray-50">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <MapPin className="w-5 h-5" />
+          <Label className="font-bold uppercase text-sm">Geolocalização e Check-in</Label>
+        </div>
+        <div className="flex items-center gap-2">
+          <Label className="text-sm">Habilitar Check-in</Label>
+          <Switch
+            checked={formData.enableCheckin}
+            onCheckedChange={(checked) => setFormData({ ...formData, enableCheckin: checked })}
+          />
+        </div>
+      </div>
+      
+      <div className="grid grid-cols-2 gap-4 mb-4">
+        <div>
+          <Label className="text-xs text-gray-600">Latitude</Label>
+          <Input
+            value={formData.latitude}
+            onChange={(e) => setFormData({ ...formData, latitude: e.target.value })}
+            placeholder="-23.5505"
+            className="border-2 border-black rounded-none mt-1"
+          />
+        </div>
+        <div>
+          <Label className="text-xs text-gray-600">Longitude</Label>
+          <Input
+            value={formData.longitude}
+            onChange={(e) => setFormData({ ...formData, longitude: e.target.value })}
+            placeholder="-46.6333"
+            className="border-2 border-black rounded-none mt-1"
+          />
+        </div>
+      </div>
+      
+      <div className="flex items-center gap-4 mb-4">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={getCurrentLocation}
+          disabled={isGettingLocation}
+          className="border-2 border-black rounded-none font-bold uppercase text-xs"
+        >
+          {isGettingLocation ? (
+            <>
+              <Loader2 className="w-3 h-3 mr-1 animate-spin" /> Obtendo...
+            </>
+          ) : (
+            <>
+              <MapPin className="w-3 h-3 mr-1" /> Usar Minha Localização
+            </>
+          )}
+        </Button>
+      </div>
+      
+      <div>
+        <Label className="text-xs text-gray-600">Raio de Proximidade (metros)</Label>
+        <Input
+          type="number"
+          value={formData.radiusMeters}
+          onChange={(e) => setFormData({ ...formData, radiusMeters: parseInt(e.target.value) || 100 })}
+          placeholder="100"
+          min={10}
+          max={10000}
+          className="border-2 border-black rounded-none mt-1 w-32"
+        />
+        <p className="text-xs text-gray-500 mt-1">
+          Distância máxima para validar check-in (10-10000m)
+        </p>
+      </div>
+    </div>
+  );
+
   return (
     <DashboardLayout>
       <div className="space-y-8">
@@ -200,7 +324,7 @@ export default function Tags() {
                 <Plus className="w-5 h-5 mr-2" /> Nova Tag
               </Button>
             </DialogTrigger>
-            <DialogContent className="border-4 border-black rounded-none brutal-shadow max-w-lg">
+            <DialogContent className="border-4 border-black rounded-none brutal-shadow max-w-lg max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle className="text-2xl font-black uppercase">Nova Tag NFC</DialogTitle>
               </DialogHeader>
@@ -261,6 +385,9 @@ export default function Tags() {
                   </p>
                 </div>
                 
+                {/* Location Fields */}
+                <LocationFields />
+                
                 {/* Preview da URL */}
                 {formData.uid && (
                   <div className="border-2 border-dashed border-gray-400 p-4 bg-gray-50">
@@ -288,6 +415,8 @@ export default function Tags() {
           <p className="text-sm">
             <strong>Como usar:</strong> Após criar uma tag, copie a URL gerada e grave-a em sua tag NFC física usando um app como "NFC Tools" no Android. 
             Quando alguém aproximar o celular da tag, será direcionado para a página de registro.
+            <br /><br />
+            <strong>Check-in:</strong> Habilite o check-in e configure a localização para permitir que usuários façam check-in quando estiverem dentro do raio definido.
           </p>
         </div>
 
@@ -314,10 +443,26 @@ export default function Tags() {
                       <div className="flex items-center gap-3 mb-1 flex-wrap">
                         <h4 className="text-lg font-black">{tag.name || "Sem nome"}</h4>
                         {getStatusBadge(tag.status)}
+                        {tag.enableCheckin && (
+                          <span className="px-3 py-1 text-xs font-bold uppercase bg-green-600 text-white">
+                            CHECK-IN
+                          </span>
+                        )}
                       </div>
                       <p className="text-sm font-mono text-gray-600 mb-2">UID: {tag.uid}</p>
                       {tag.description && (
                         <p className="text-sm text-gray-500 mb-2">{tag.description}</p>
+                      )}
+                      
+                      {/* Location info */}
+                      {tag.latitude && tag.longitude && (
+                        <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
+                          <MapPin className="w-4 h-4" />
+                          <span>
+                            {parseFloat(tag.latitude).toFixed(4)}, {parseFloat(tag.longitude).toFixed(4)}
+                            {tag.radiusMeters && ` (raio: ${tag.radiusMeters}m)`}
+                          </span>
+                        </div>
                       )}
                       
                       {/* URL para Gravação NFC */}
@@ -399,7 +544,7 @@ export default function Tags() {
 
         {/* Edit Dialog */}
         <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-          <DialogContent className="border-4 border-black rounded-none brutal-shadow max-w-lg">
+          <DialogContent className="border-4 border-black rounded-none brutal-shadow max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="text-2xl font-black uppercase">Editar Tag</DialogTitle>
             </DialogHeader>
@@ -452,6 +597,10 @@ export default function Tags() {
                   className="border-2 border-black rounded-none mt-1"
                 />
               </div>
+              
+              {/* Location Fields */}
+              <LocationFields />
+              
               <Button 
                 onClick={handleUpdate} 
                 disabled={updateMutation.isPending}

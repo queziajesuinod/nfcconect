@@ -10,8 +10,25 @@ import {
   createNfcUser, getNfcUserByTagId, getNfcUserById, getAllNfcUsers, updateNfcUser, validateNfcUser, deleteNfcUser,
   createConnectionLog, getConnectionLogs, getConnectionLogsByTagId, getConnectionLogsByUserId,
   createDynamicLink, getDynamicLinkByShortCode, getDynamicLinksByUserId, getAllDynamicLinks, updateDynamicLink, incrementLinkClickCount, deleteDynamicLink,
+  createCheckin, getCheckinsByTagId, getCheckinsByUserId, getAllCheckins, getCheckinStats,
   getStats
 } from "./db";
+
+// Helper function to calculate distance between two coordinates (Haversine formula)
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371e3; // Earth's radius in meters
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c; // Distance in meters
+}
 
 // Admin procedure - only admins can access
 const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
@@ -60,6 +77,10 @@ export const appRouter = router({
         description: z.string().optional(),
         status: z.enum(['active', 'inactive', 'blocked']).optional(),
         redirectUrl: z.string().optional(),
+        latitude: z.string().optional(),
+        longitude: z.string().optional(),
+        radiusMeters: z.number().optional(),
+        enableCheckin: z.boolean().optional(),
       }))
       .mutation(async ({ input }) => {
         const existing = await getNfcTagByUid(input.uid);
@@ -74,6 +95,10 @@ export const appRouter = router({
         description: z.string().optional(),
         status: z.enum(['active', 'inactive', 'blocked']).optional(),
         redirectUrl: z.string().optional(),
+        latitude: z.string().optional(),
+        longitude: z.string().optional(),
+        radiusMeters: z.number().optional(),
+        enableCheckin: z.boolean().optional(),
       }))
       .mutation(async ({ input }) => {
         const { id, ...data } = input;
@@ -153,6 +178,8 @@ export const appRouter = router({
         phone: z.string().optional(),
         deviceInfo: z.string().optional(),
         userAgent: z.string().optional(),
+        latitude: z.string().optional(),
+        longitude: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         // Find or create tag
@@ -179,6 +206,8 @@ export const appRouter = router({
             action: 'validation',
             ipAddress: ctx.req.ip || ctx.req.headers['x-forwarded-for'] as string || null,
             userAgent: input.userAgent || ctx.req.headers['user-agent'] || null,
+            latitude: input.latitude || null,
+            longitude: input.longitude || null,
           });
           return { 
             isNewUser: false, 
@@ -187,7 +216,7 @@ export const appRouter = router({
           };
         }
 
-        // Create new NFC user
+        // Create new NFC user with geolocation
         const ipAddress = ctx.req.ip || ctx.req.headers['x-forwarded-for'] as string || null;
         const userAgent = input.userAgent || ctx.req.headers['user-agent'] || null;
         
@@ -199,15 +228,19 @@ export const appRouter = router({
           deviceInfo: input.deviceInfo || null,
           ipAddress,
           userAgent,
+          registrationLatitude: input.latitude || null,
+          registrationLongitude: input.longitude || null,
         });
 
-        // Log first connection
+        // Log first connection with location
         await createConnectionLog({
           tagId: tag.id,
           nfcUserId: result.id,
           action: 'first_read',
           ipAddress,
           userAgent,
+          latitude: input.latitude || null,
+          longitude: input.longitude || null,
         });
 
         const newUser = await getNfcUserById(result.id);
@@ -330,10 +363,120 @@ export const appRouter = router({
       }),
   }),
 
+  // ============ CHECK-IN ROUTES ============
+  checkins: router({
+    // Public endpoint for check-in
+    create: publicProcedure
+      .input(z.object({
+        tagUid: z.string().min(1),
+        latitude: z.string(),
+        longitude: z.string(),
+        deviceInfo: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        // Find tag
+        const tag = await getNfcTagByUid(input.tagUid);
+        if (!tag) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Tag não encontrada' });
+        }
+        
+        if (tag.status === 'blocked') {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Esta tag está bloqueada' });
+        }
+
+        if (!tag.enableCheckin) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Check-in não habilitado para esta tag' });
+        }
+
+        // Find user for this tag
+        const nfcUser = await getNfcUserByTagId(tag.id);
+        if (!nfcUser) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Usuário não encontrado. Registre-se primeiro.' });
+        }
+
+        // Calculate distance if tag has location
+        let distanceMeters: number | null = null;
+        let isWithinRadius = false;
+
+        if (tag.latitude && tag.longitude) {
+          const tagLat = parseFloat(tag.latitude);
+          const tagLon = parseFloat(tag.longitude);
+          const userLat = parseFloat(input.latitude);
+          const userLon = parseFloat(input.longitude);
+
+          distanceMeters = Math.round(calculateDistance(tagLat, tagLon, userLat, userLon));
+          isWithinRadius = distanceMeters <= (tag.radiusMeters || 100);
+        }
+
+        // Create check-in record
+        const ipAddress = ctx.req.ip || ctx.req.headers['x-forwarded-for'] as string || null;
+        
+        const result = await createCheckin({
+          tagId: tag.id,
+          nfcUserId: nfcUser.id,
+          latitude: input.latitude,
+          longitude: input.longitude,
+          distanceMeters,
+          isWithinRadius,
+          deviceInfo: input.deviceInfo || null,
+          ipAddress,
+        });
+
+        // Log check-in action
+        await createConnectionLog({
+          tagId: tag.id,
+          nfcUserId: nfcUser.id,
+          action: 'checkin',
+          ipAddress,
+          userAgent: ctx.req.headers['user-agent'] || null,
+          latitude: input.latitude,
+          longitude: input.longitude,
+          metadata: JSON.stringify({ distanceMeters, isWithinRadius }),
+        });
+
+        return {
+          success: true,
+          checkinId: result.id,
+          distanceMeters,
+          isWithinRadius,
+          radiusMeters: tag.radiusMeters || 100,
+          user: nfcUser,
+        };
+      }),
+
+    // Admin: list all check-ins
+    list: adminProcedure
+      .input(z.object({ limit: z.number().optional() }).optional())
+      .query(async ({ input }) => {
+        return getAllCheckins(input?.limit || 100);
+      }),
+
+    // Admin: check-ins by tag
+    byTag: adminProcedure
+      .input(z.object({ tagId: z.number(), limit: z.number().optional() }))
+      .query(async ({ input }) => {
+        return getCheckinsByTagId(input.tagId, input.limit || 100);
+      }),
+
+    // Admin: check-ins by user
+    byUser: adminProcedure
+      .input(z.object({ nfcUserId: z.number(), limit: z.number().optional() }))
+      .query(async ({ input }) => {
+        return getCheckinsByUserId(input.nfcUserId, input.limit || 100);
+      }),
+
+    // Admin: check-in stats
+    stats: adminProcedure.query(async () => {
+      return getCheckinStats();
+    }),
+  }),
+
   // ============ STATS ROUTES ============
   stats: router({
     overview: adminProcedure.query(async () => {
-      return getStats();
+      const baseStats = await getStats();
+      const checkinStats = await getCheckinStats();
+      return { ...baseStats, ...checkinStats };
     }),
   }),
 });

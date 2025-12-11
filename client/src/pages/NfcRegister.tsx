@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
-import { Nfc, CheckCircle, ArrowRight, Loader2, AlertCircle } from "lucide-react";
+import { Nfc, CheckCircle, ArrowRight, Loader2, AlertCircle, MapPin } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useSearch } from "wouter";
 import { toast } from "sonner";
@@ -11,6 +11,12 @@ interface FormData {
   name: string;
   email: string;
   phone: string;
+}
+
+interface GeoLocation {
+  latitude: string;
+  longitude: string;
+  accuracy: number;
 }
 
 export default function NfcRegister() {
@@ -22,6 +28,9 @@ export default function NfcRegister() {
   const [isRegistered, setIsRegistered] = useState(false);
   const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
   const [isRedirecting, setIsRedirecting] = useState(false);
+  const [location, setLocation] = useState<GeoLocation | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
 
   // Check if user already exists for this tag
   const { data: checkData, isLoading: isChecking, error: checkError } = trpc.nfcUsers.checkByTagUid.useQuery(
@@ -47,11 +56,59 @@ export default function NfcRegister() {
     },
   });
 
+  // Request geolocation on mount
+  useEffect(() => {
+    if (!checkData?.exists && tagUid) {
+      requestLocation();
+    }
+  }, [checkData, tagUid]);
+
+  const requestLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationError("Geolocalização não suportada neste navegador");
+      return;
+    }
+
+    setIsGettingLocation(true);
+    setLocationError(null);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLocation({
+          latitude: position.coords.latitude.toString(),
+          longitude: position.coords.longitude.toString(),
+          accuracy: position.coords.accuracy,
+        });
+        setIsGettingLocation(false);
+      },
+      (error) => {
+        setIsGettingLocation(false);
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            setLocationError("Permissão de localização negada");
+            break;
+          case error.POSITION_UNAVAILABLE:
+            setLocationError("Localização indisponível");
+            break;
+          case error.TIMEOUT:
+            setLocationError("Tempo esgotado ao obter localização");
+            break;
+          default:
+            setLocationError("Erro ao obter localização");
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      }
+    );
+  };
+
   // Auto-redirect if user already exists
   useEffect(() => {
     if (checkData?.exists && checkData.redirectUrl) {
       setIsRedirecting(true);
-      // Small delay for UX feedback
       const timer = setTimeout(() => {
         window.location.href = checkData.redirectUrl!;
       }, 1500);
@@ -72,6 +129,18 @@ export default function NfcRegister() {
       phone: formData.phone || undefined,
       userAgent: navigator.userAgent,
       deviceInfo: `${navigator.platform} - ${navigator.language}`,
+      latitude: location?.latitude,
+      longitude: location?.longitude,
+    });
+  };
+
+  const handleSkipRegister = () => {
+    registerMutation.mutate({
+      tagUid,
+      userAgent: navigator.userAgent,
+      deviceInfo: `${navigator.platform} - ${navigator.language}`,
+      latitude: location?.latitude,
+      longitude: location?.longitude,
     });
   };
 
@@ -245,6 +314,45 @@ export default function NfcRegister() {
                 Esta é sua primeira conexão com esta tag NFC. 
                 Preencha seus dados para se registrar (opcional).
               </p>
+
+              {/* Location Status */}
+              <div className="mb-6 p-4 border-2 border-gray-200 bg-gray-50">
+                <div className="flex items-center gap-3">
+                  <MapPin className="w-5 h-5 text-gray-600" />
+                  <div className="flex-1">
+                    {isGettingLocation ? (
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span className="text-sm text-gray-600">Obtendo localização...</span>
+                      </div>
+                    ) : location ? (
+                      <div>
+                        <span className="text-sm text-green-600 font-medium">Localização capturada</span>
+                        <p className="text-xs text-gray-500">
+                          Precisão: ~{Math.round(location.accuracy)}m
+                        </p>
+                      </div>
+                    ) : locationError ? (
+                      <div>
+                        <span className="text-sm text-red-600">{locationError}</span>
+                        <button 
+                          onClick={requestLocation}
+                          className="text-xs text-blue-600 underline ml-2"
+                        >
+                          Tentar novamente
+                        </button>
+                      </div>
+                    ) : (
+                      <button 
+                        onClick={requestLocation}
+                        className="text-sm text-blue-600 underline"
+                      >
+                        Permitir localização
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
               
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
@@ -294,13 +402,7 @@ export default function NfcRegister() {
               </form>
               
               <button
-                onClick={() => {
-                  registerMutation.mutate({
-                    tagUid,
-                    userAgent: navigator.userAgent,
-                    deviceInfo: `${navigator.platform} - ${navigator.language}`,
-                  });
-                }}
+                onClick={handleSkipRegister}
                 disabled={registerMutation.isPending}
                 className="w-full text-center text-sm text-gray-500 hover:text-black mt-4 underline"
               >

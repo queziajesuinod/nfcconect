@@ -15,6 +15,13 @@
       "when": 1765409517748,
       "tag": "0001_nervous_ricochet",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1765413090466,
+      "tag": "0002_workable_snowbird",
+      "breakpoints": true
     }
   ]
 }

@@ -43,3 +43,12 @@
 - [x] Exibir URL com botão de copiar na listagem de tags
 - [x] Adicionar QR Code da URL para facilitar gravação
 - [x] Redirecionar usuários já cadastrados diretamente sem mostrar tela de registro
+
+## Geolocalização e Check-in
+- [x] Adicionar campos de latitude/longitude no schema de tags NFC
+- [x] Adicionar campo de raio de proximidade na tag
+- [x] Capturar geolocalização no primeiro cadastro do usuário
+- [x] Criar tabela de check-ins com localização
+- [x] Implementar API de check-in com validação de proximidade
+- [x] Interface para configurar raio de proximidade por tag
+- [x] Visualização de check-ins no dashboard

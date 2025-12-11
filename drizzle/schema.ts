@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean, decimal } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow (admin users).
@@ -28,6 +28,11 @@ export const nfcTags = mysqlTable("nfc_tags", {
   description: text("description"),
   status: mysqlEnum("status", ["active", "inactive", "blocked"]).default("active").notNull(),
   redirectUrl: text("redirectUrl"),
+  // Geolocation fields
+  latitude: varchar("latitude", { length: 32 }),
+  longitude: varchar("longitude", { length: 32 }),
+  radiusMeters: int("radiusMeters").default(100), // Default 100 meters radius
+  enableCheckin: boolean("enableCheckin").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -47,6 +52,9 @@ export const nfcUsers = mysqlTable("nfc_users", {
   deviceInfo: text("deviceInfo"),
   ipAddress: varchar("ipAddress", { length: 64 }),
   userAgent: text("userAgent"),
+  // Geolocation at first registration
+  registrationLatitude: varchar("registrationLatitude", { length: 32 }),
+  registrationLongitude: varchar("registrationLongitude", { length: 32 }),
   isValidated: boolean("isValidated").default(false).notNull(),
   firstConnectionAt: timestamp("firstConnectionAt").defaultNow().notNull(),
   lastConnectionAt: timestamp("lastConnectionAt").defaultNow().notNull(),
@@ -64,15 +72,37 @@ export const connectionLogs = mysqlTable("connection_logs", {
   id: int("id").autoincrement().primaryKey(),
   tagId: int("tagId").notNull(),
   nfcUserId: int("nfcUserId"),
-  action: mysqlEnum("action", ["first_read", "validation", "redirect", "update", "block"]).notNull(),
+  action: mysqlEnum("action", ["first_read", "validation", "redirect", "update", "block", "checkin"]).notNull(),
   ipAddress: varchar("ipAddress", { length: 64 }),
   userAgent: text("userAgent"),
+  // Geolocation at time of action
+  latitude: varchar("latitude", { length: 32 }),
+  longitude: varchar("longitude", { length: 32 }),
   metadata: text("metadata"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
 export type ConnectionLog = typeof connectionLogs.$inferSelect;
 export type InsertConnectionLog = typeof connectionLogs.$inferInsert;
+
+/**
+ * Check-ins - records of users checking in at NFC tag locations
+ */
+export const checkins = mysqlTable("checkins", {
+  id: int("id").autoincrement().primaryKey(),
+  tagId: int("tagId").notNull(),
+  nfcUserId: int("nfcUserId").notNull(),
+  latitude: varchar("latitude", { length: 32 }).notNull(),
+  longitude: varchar("longitude", { length: 32 }).notNull(),
+  distanceMeters: int("distanceMeters"), // Distance from tag location
+  isWithinRadius: boolean("isWithinRadius").default(false).notNull(),
+  deviceInfo: text("deviceInfo"),
+  ipAddress: varchar("ipAddress", { length: 64 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Checkin = typeof checkins.$inferSelect;
+export type InsertCheckin = typeof checkins.$inferInsert;
 
 /**
  * Dynamic Links - personalized URLs for each user

@@ -5,7 +5,8 @@ import {
   nfcTags, InsertNfcTag, NfcTag,
   nfcUsers, InsertNfcUser, NfcUser,
   connectionLogs, InsertConnectionLog,
-  dynamicLinks, InsertDynamicLink
+  dynamicLinks, InsertDynamicLink,
+  checkins, InsertCheckin
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -291,6 +292,93 @@ export async function deleteDynamicLink(id: number) {
   if (!db) throw new Error("Database not available");
   
   await db.delete(dynamicLinks).where(eq(dynamicLinks.id, id));
+}
+
+// ============ CHECK-IN FUNCTIONS ============
+
+export async function createCheckin(checkin: InsertCheckin) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(checkins).values(checkin);
+  return { id: result[0].insertId };
+}
+
+export async function getCheckinsByTagId(tagId: number, limit = 100) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return db.select().from(checkins)
+    .where(eq(checkins.tagId, tagId))
+    .orderBy(desc(checkins.createdAt))
+    .limit(limit);
+}
+
+export async function getCheckinsByUserId(nfcUserId: number, limit = 100) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return db.select().from(checkins)
+    .where(eq(checkins.nfcUserId, nfcUserId))
+    .orderBy(desc(checkins.createdAt))
+    .limit(limit);
+}
+
+export async function getAllCheckins(limit = 100) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const results = await db.select({
+    id: checkins.id,
+    tagId: checkins.tagId,
+    nfcUserId: checkins.nfcUserId,
+    latitude: checkins.latitude,
+    longitude: checkins.longitude,
+    distanceMeters: checkins.distanceMeters,
+    isWithinRadius: checkins.isWithinRadius,
+    deviceInfo: checkins.deviceInfo,
+    ipAddress: checkins.ipAddress,
+    createdAt: checkins.createdAt,
+    userName: nfcUsers.name,
+    userEmail: nfcUsers.email,
+    tagUid: nfcTags.uid,
+    tagName: nfcTags.name,
+  })
+    .from(checkins)
+    .leftJoin(nfcUsers, eq(checkins.nfcUserId, nfcUsers.id))
+    .leftJoin(nfcTags, eq(checkins.tagId, nfcTags.id))
+    .orderBy(desc(checkins.createdAt))
+    .limit(limit);
+  
+  return results.map(r => ({
+    ...r,
+    nfcUser: r.userName || r.userEmail ? { name: r.userName, email: r.userEmail } : null,
+    tag: r.tagUid ? { uid: r.tagUid, name: r.tagName } : null,
+  }));
+}
+
+export async function getCheckinStats() {
+  const db = await getDb();
+  if (!db) return { totalCheckins: 0, checkinsWithinRadius: 0, checkinsOutsideRadius: 0, checkinsToday: 0 };
+  
+  const [total] = await db.select({ count: sql<number>`count(*)` }).from(checkins);
+  const [withinRadius] = await db.select({ count: sql<number>`count(*)` }).from(checkins)
+    .where(eq(checkins.isWithinRadius, true));
+  const [outsideRadius] = await db.select({ count: sql<number>`count(*)` }).from(checkins)
+    .where(eq(checkins.isWithinRadius, false));
+  
+  // Get today's checkins
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const [todayCount] = await db.select({ count: sql<number>`count(*)` }).from(checkins)
+    .where(sql`${checkins.createdAt} >= ${today}`);
+  
+  return {
+    totalCheckins: Number(total?.count || 0),
+    checkinsWithinRadius: Number(withinRadius?.count || 0),
+    checkinsOutsideRadius: Number(outsideRadius?.count || 0),
+    checkinsToday: Number(todayCount?.count || 0)
+  };
 }
 
 // ============ STATISTICS FUNCTIONS ============

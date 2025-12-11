@@ -32,6 +32,11 @@ vi.mock("./db", () => ({
   incrementLinkClickCount: vi.fn().mockResolvedValue(undefined),
   deleteDynamicLink: vi.fn().mockResolvedValue(undefined),
   getStats: vi.fn().mockResolvedValue({ totalTags: 10, totalUsers: 5, totalConnections: 50, totalLinks: 3 }),
+  createCheckin: vi.fn().mockResolvedValue({ id: 1 }),
+  getCheckinsByTagId: vi.fn().mockResolvedValue([]),
+  getCheckinsByUserId: vi.fn().mockResolvedValue([]),
+  getAllCheckins: vi.fn().mockResolvedValue([]),
+  getCheckinStats: vi.fn().mockResolvedValue({ totalCheckins: 10, checkinsWithinRadius: 8, checkinsOutsideRadius: 2, checkinsToday: 3 }),
 }));
 
 type AuthenticatedUser = NonNullable<TrpcContext["user"]>;

@@ -12,6 +12,7 @@ import Logs from "./pages/Logs";
 import Links from "./pages/Links";
 import NfcRegister from "./pages/NfcRegister";
 import LinkRedirect from "./pages/LinkRedirect";
+import Checkins from "./pages/Checkins";
 
 function Router() {
   return (
@@ -27,6 +28,7 @@ function Router() {
       <Route path="/dashboard/users" component={Users} />
       <Route path="/dashboard/logs" component={Logs} />
       <Route path="/dashboard/links" component={Links} />
+      <Route path="/dashboard/checkins" component={Checkins} />
       
       {/* Fallback */}
       <Route path="/404" component={NotFound} />
