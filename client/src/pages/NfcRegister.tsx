@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
-import { Nfc, CheckCircle, ArrowRight, Loader2, AlertCircle, MapPin } from "lucide-react";
+import { Nfc, CheckCircle, ArrowRight, Loader2, AlertCircle, MapPin, Smartphone, Download } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useSearch } from "wouter";
 import { toast } from "sonner";
@@ -247,6 +247,8 @@ export default function NfcRegister() {
 
   // Registration completed
   if (isRegistered) {
+    const appUrl = `/app?uid=${tagUid}`;
+    
     return (
       <div className="min-h-screen bg-white flex items-center justify-center p-4">
         <div className="border-4 border-black p-8 md:p-12 brutal-shadow max-w-md w-full text-center">
@@ -254,23 +256,48 @@ export default function NfcRegister() {
             <CheckCircle className="w-12 h-12 text-white" />
           </div>
           <h2 className="mb-4">Conectado!</h2>
-          <p className="text-gray-600 mb-8">
+          <p className="text-gray-600 mb-6">
             {registerMutation.data?.isNewUser 
               ? "Seu registro foi realizado com sucesso."
               : "Bem-vindo de volta! Sua conexão foi registrada."
             }
           </p>
           
-          {redirectUrl ? (
+          {/* App Installation Card */}
+          <div className="bg-yellow-50 border-4 border-yellow-500 p-4 mb-6 text-left">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 bg-yellow-500 flex items-center justify-center shrink-0">
+                <Smartphone className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h4 className="font-bold text-sm mb-1">INSTALE O APP</h4>
+                <p className="text-xs text-gray-600">
+                  Para check-in automático, instale o app no seu celular.
+                </p>
+              </div>
+            </div>
+          </div>
+          
+          <Button 
+            onClick={() => window.location.href = appUrl}
+            className="w-full brutal-shadow-sm hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all font-bold uppercase text-lg py-6 h-auto mb-4 bg-blue-600 hover:bg-blue-700"
+          >
+            <Download className="mr-2 w-5 h-5" /> Instalar App
+          </Button>
+          
+          {redirectUrl && (
             <Button 
               onClick={handleRedirect}
-              className="w-full brutal-shadow-sm hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all font-bold uppercase text-lg py-6 h-auto"
+              variant="outline"
+              className="w-full border-2 border-black font-bold uppercase"
             >
-              Continuar <ArrowRight className="ml-2 w-5 h-5" />
+              Continuar sem instalar <ArrowRight className="ml-2 w-5 h-5" />
             </Button>
-          ) : (
-            <p className="text-sm text-gray-500">
-              Você pode fechar esta página.
+          )}
+          
+          {!redirectUrl && (
+            <p className="text-sm text-gray-500 mt-4">
+              Ou você pode fechar esta página.
             </p>
           )}
         </div>

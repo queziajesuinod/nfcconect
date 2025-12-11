@@ -68,3 +68,7 @@
 - [x] Criar página de instalação do PWA para usuários
 - [x] Página de atualização de localização com UI amigável
 - [x] Notificações push para lembrar usuário de ativar localização
+
+## Melhorias de Acesso ao PWA
+- [x] Botão "Instalar App" na listagem de usuários com link copiável
+- [x] Redirecionar automaticamente após primeiro cadastro para o PWA

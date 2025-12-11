@@ -176,7 +176,33 @@ export async function getAllNfcUsers() {
   const db = await getDb();
   if (!db) return [];
   
-  return db.select().from(nfcUsers).orderBy(desc(nfcUsers.createdAt));
+  const result = await db.select({
+    id: nfcUsers.id,
+    tagId: nfcUsers.tagId,
+    name: nfcUsers.name,
+    email: nfcUsers.email,
+    phone: nfcUsers.phone,
+    deviceInfo: nfcUsers.deviceInfo,
+    ipAddress: nfcUsers.ipAddress,
+    userAgent: nfcUsers.userAgent,
+    registrationLatitude: nfcUsers.registrationLatitude,
+    registrationLongitude: nfcUsers.registrationLongitude,
+    isValidated: nfcUsers.isValidated,
+    firstConnectionAt: nfcUsers.firstConnectionAt,
+    lastConnectionAt: nfcUsers.lastConnectionAt,
+    createdAt: nfcUsers.createdAt,
+    updatedAt: nfcUsers.updatedAt,
+    tag: {
+      id: nfcTags.id,
+      uid: nfcTags.uid,
+      name: nfcTags.name,
+    },
+  })
+  .from(nfcUsers)
+  .leftJoin(nfcTags, eq(nfcUsers.tagId, nfcTags.id))
+  .orderBy(desc(nfcUsers.createdAt));
+  
+  return result;
 }
 
 export async function updateNfcUser(id: number, data: Partial<InsertNfcUser>) {

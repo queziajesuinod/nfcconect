@@ -19,7 +19,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { trpc } from "@/lib/trpc";
-import { Users as UsersIcon, Pencil, Trash2, CheckCircle, XCircle, Shield, Clock } from "lucide-react";
+import { Users as UsersIcon, Pencil, Trash2, CheckCircle, XCircle, Shield, Clock, Smartphone, Copy, ExternalLink } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -186,7 +186,36 @@ export default function Users() {
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                    {user.tag?.uid && (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const appUrl = `${window.location.origin}/app?uid=${user.tag?.uid}`;
+                            navigator.clipboard.writeText(appUrl);
+                            toast.success("Link do app copiado!");
+                          }}
+                          className="border-2 border-blue-600 text-blue-600 rounded-none font-bold uppercase hover:bg-blue-600 hover:text-white"
+                          title="Copiar link do app"
+                        >
+                          <Smartphone className="w-4 h-4 mr-1" />
+                          <Copy className="w-3 h-3" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            window.open(`/app?uid=${user.tag?.uid}`, '_blank');
+                          }}
+                          className="border-2 border-blue-600 text-blue-600 rounded-none font-bold uppercase hover:bg-blue-600 hover:text-white"
+                          title="Abrir app"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </Button>
+                      </>
+                    )}
                     {!user.isValidated && (
                       <Button
                         variant="outline"
