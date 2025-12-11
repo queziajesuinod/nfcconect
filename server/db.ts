@@ -6,7 +6,10 @@ import {
   nfcUsers, InsertNfcUser, NfcUser,
   connectionLogs, InsertConnectionLog,
   dynamicLinks, InsertDynamicLink,
-  checkins, InsertCheckin
+  checkins, InsertCheckin,
+  checkinSchedules, InsertCheckinSchedule,
+  automaticCheckins, InsertAutomaticCheckin,
+  userLocationUpdates, InsertUserLocationUpdate
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -398,4 +401,258 @@ export async function getStats() {
     totalConnections: Number(logsCount?.count || 0),
     totalLinks: Number(linksCount?.count || 0)
   };
+}
+
+
+// ============ CHECK-IN SCHEDULE FUNCTIONS ============
+
+export async function createCheckinSchedule(schedule: InsertCheckinSchedule) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(checkinSchedules).values(schedule);
+  return { id: result[0].insertId };
+}
+
+export async function getCheckinScheduleById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const result = await db.select().from(checkinSchedules).where(eq(checkinSchedules.id, id)).limit(1);
+  return result[0];
+}
+
+export async function getCheckinSchedulesByTagId(tagId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return db.select().from(checkinSchedules)
+    .where(eq(checkinSchedules.tagId, tagId))
+    .orderBy(desc(checkinSchedules.createdAt));
+}
+
+export async function getAllCheckinSchedules() {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const results = await db.select({
+    id: checkinSchedules.id,
+    tagId: checkinSchedules.tagId,
+    name: checkinSchedules.name,
+    description: checkinSchedules.description,
+    daysOfWeek: checkinSchedules.daysOfWeek,
+    startTime: checkinSchedules.startTime,
+    endTime: checkinSchedules.endTime,
+    isActive: checkinSchedules.isActive,
+    timezone: checkinSchedules.timezone,
+    createdAt: checkinSchedules.createdAt,
+    updatedAt: checkinSchedules.updatedAt,
+    tagUid: nfcTags.uid,
+    tagName: nfcTags.name,
+  })
+    .from(checkinSchedules)
+    .leftJoin(nfcTags, eq(checkinSchedules.tagId, nfcTags.id))
+    .orderBy(desc(checkinSchedules.createdAt));
+  
+  return results.map(r => ({
+    ...r,
+    tag: r.tagUid ? { uid: r.tagUid, name: r.tagName } : null,
+  }));
+}
+
+export async function getActiveSchedulesForDay(dayOfWeek: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  // Get all active schedules and filter by day
+  const allSchedules = await db.select({
+    id: checkinSchedules.id,
+    tagId: checkinSchedules.tagId,
+    name: checkinSchedules.name,
+    daysOfWeek: checkinSchedules.daysOfWeek,
+    startTime: checkinSchedules.startTime,
+    endTime: checkinSchedules.endTime,
+    timezone: checkinSchedules.timezone,
+    tagLatitude: nfcTags.latitude,
+    tagLongitude: nfcTags.longitude,
+    tagRadiusMeters: nfcTags.radiusMeters,
+  })
+    .from(checkinSchedules)
+    .leftJoin(nfcTags, eq(checkinSchedules.tagId, nfcTags.id))
+    .where(eq(checkinSchedules.isActive, true));
+  
+  // Filter schedules that include the specified day
+  return allSchedules.filter(s => {
+    const days = s.daysOfWeek.split(',').map(d => parseInt(d.trim()));
+    return days.includes(dayOfWeek);
+  });
+}
+
+export async function updateCheckinSchedule(id: number, data: Partial<InsertCheckinSchedule>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.update(checkinSchedules).set(data).where(eq(checkinSchedules.id, id));
+}
+
+export async function deleteCheckinSchedule(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.delete(checkinSchedules).where(eq(checkinSchedules.id, id));
+}
+
+// ============ AUTOMATIC CHECK-IN FUNCTIONS ============
+
+export async function createAutomaticCheckin(checkin: InsertAutomaticCheckin) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(automaticCheckins).values(checkin);
+  return { id: result[0].insertId };
+}
+
+export async function getAllAutomaticCheckins(limit = 100) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const results = await db.select({
+    id: automaticCheckins.id,
+    scheduleId: automaticCheckins.scheduleId,
+    tagId: automaticCheckins.tagId,
+    nfcUserId: automaticCheckins.nfcUserId,
+    userLatitude: automaticCheckins.userLatitude,
+    userLongitude: automaticCheckins.userLongitude,
+    distanceMeters: automaticCheckins.distanceMeters,
+    isWithinRadius: automaticCheckins.isWithinRadius,
+    scheduledDate: automaticCheckins.scheduledDate,
+    periodStart: automaticCheckins.periodStart,
+    periodEnd: automaticCheckins.periodEnd,
+    checkinTime: automaticCheckins.checkinTime,
+    status: automaticCheckins.status,
+    errorMessage: automaticCheckins.errorMessage,
+    createdAt: automaticCheckins.createdAt,
+    userName: nfcUsers.name,
+    userEmail: nfcUsers.email,
+    tagUid: nfcTags.uid,
+    tagName: nfcTags.name,
+    scheduleName: checkinSchedules.name,
+  })
+    .from(automaticCheckins)
+    .leftJoin(nfcUsers, eq(automaticCheckins.nfcUserId, nfcUsers.id))
+    .leftJoin(nfcTags, eq(automaticCheckins.tagId, nfcTags.id))
+    .leftJoin(checkinSchedules, eq(automaticCheckins.scheduleId, checkinSchedules.id))
+    .orderBy(desc(automaticCheckins.createdAt))
+    .limit(limit);
+  
+  return results.map(r => ({
+    ...r,
+    nfcUser: r.userName || r.userEmail ? { name: r.userName, email: r.userEmail } : null,
+    tag: r.tagUid ? { uid: r.tagUid, name: r.tagName } : null,
+    schedule: r.scheduleName ? { name: r.scheduleName } : null,
+  }));
+}
+
+export async function getAutomaticCheckinsByScheduleId(scheduleId: number, limit = 100) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return db.select().from(automaticCheckins)
+    .where(eq(automaticCheckins.scheduleId, scheduleId))
+    .orderBy(desc(automaticCheckins.createdAt))
+    .limit(limit);
+}
+
+export async function updateAutomaticCheckinStatus(id: number, status: string, errorMessage?: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.update(automaticCheckins)
+    .set({ status: status as any, errorMessage: errorMessage || null })
+    .where(eq(automaticCheckins.id, id));
+}
+
+// ============ USER LOCATION UPDATE FUNCTIONS ============
+
+export async function createUserLocationUpdate(update: InsertUserLocationUpdate) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(userLocationUpdates).values(update);
+  return { id: result[0].insertId };
+}
+
+export async function getLatestUserLocation(nfcUserId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const result = await db.select().from(userLocationUpdates)
+    .where(eq(userLocationUpdates.nfcUserId, nfcUserId))
+    .orderBy(desc(userLocationUpdates.createdAt))
+    .limit(1);
+  return result[0];
+}
+
+export async function getUsersWithRecentLocation(minutesAgo = 30) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const cutoffTime = new Date(Date.now() - minutesAgo * 60 * 1000);
+  
+  // Get latest location for each user within the time window
+  const locations = await db.select({
+    nfcUserId: userLocationUpdates.nfcUserId,
+    latitude: userLocationUpdates.latitude,
+    longitude: userLocationUpdates.longitude,
+    accuracy: userLocationUpdates.accuracy,
+    createdAt: userLocationUpdates.createdAt,
+    userName: nfcUsers.name,
+    userEmail: nfcUsers.email,
+    tagId: nfcUsers.tagId,
+  })
+    .from(userLocationUpdates)
+    .leftJoin(nfcUsers, eq(userLocationUpdates.nfcUserId, nfcUsers.id))
+    .where(sql`${userLocationUpdates.createdAt} >= ${cutoffTime}`)
+    .orderBy(desc(userLocationUpdates.createdAt));
+  
+  // Get unique users with their latest location
+  const userMap = new Map<number, typeof locations[0]>();
+  for (const loc of locations) {
+    if (!userMap.has(loc.nfcUserId)) {
+      userMap.set(loc.nfcUserId, loc);
+    }
+  }
+  
+  return Array.from(userMap.values());
+}
+
+export async function getUsersByTagIdWithRecentLocation(tagId: number, minutesAgo = 30) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const cutoffTime = new Date(Date.now() - minutesAgo * 60 * 1000);
+  
+  // Get users associated with this tag
+  const tagUsers = await db.select().from(nfcUsers).where(eq(nfcUsers.tagId, tagId));
+  
+  const usersWithLocation = [];
+  
+  for (const user of tagUsers) {
+    const [latestLocation] = await db.select().from(userLocationUpdates)
+      .where(and(
+        eq(userLocationUpdates.nfcUserId, user.id),
+        sql`${userLocationUpdates.createdAt} >= ${cutoffTime}`
+      ))
+      .orderBy(desc(userLocationUpdates.createdAt))
+      .limit(1);
+    
+    if (latestLocation) {
+      usersWithLocation.push({
+        user,
+        location: latestLocation,
+      });
+    }
+  }
+  
+  return usersWithLocation;
 }

@@ -122,3 +122,70 @@ export const dynamicLinks = mysqlTable("dynamic_links", {
 
 export type DynamicLink = typeof dynamicLinks.$inferSelect;
 export type InsertDynamicLink = typeof dynamicLinks.$inferInsert;
+
+
+/**
+ * Check-in Schedules - defines automatic check-in periods for tags
+ * Allows setting specific days and time ranges for automatic check-in
+ */
+export const checkinSchedules = mysqlTable("checkin_schedules", {
+  id: int("id").autoincrement().primaryKey(),
+  tagId: int("tagId").notNull(),
+  name: varchar("name", { length: 255 }),
+  description: text("description"),
+  // Days of week (0=Sunday, 1=Monday, ..., 6=Saturday) stored as comma-separated string
+  daysOfWeek: varchar("daysOfWeek", { length: 32 }).notNull(), // e.g., "0,3,6" for Sun, Wed, Sat
+  startTime: varchar("startTime", { length: 8 }).notNull(), // Format: "HH:MM" e.g., "08:00"
+  endTime: varchar("endTime", { length: 8 }).notNull(), // Format: "HH:MM" e.g., "10:00"
+  isActive: boolean("isActive").default(true).notNull(),
+  // Timezone for the schedule
+  timezone: varchar("timezone", { length: 64 }).default("America/Sao_Paulo").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type CheckinSchedule = typeof checkinSchedules.$inferSelect;
+export type InsertCheckinSchedule = typeof checkinSchedules.$inferInsert;
+
+/**
+ * Automatic Check-ins - records of check-ins performed automatically by the system
+ */
+export const automaticCheckins = mysqlTable("automatic_checkins", {
+  id: int("id").autoincrement().primaryKey(),
+  scheduleId: int("scheduleId").notNull(),
+  tagId: int("tagId").notNull(),
+  nfcUserId: int("nfcUserId").notNull(),
+  // User's location at the time of automatic check-in
+  userLatitude: varchar("userLatitude", { length: 32 }),
+  userLongitude: varchar("userLongitude", { length: 32 }),
+  distanceMeters: int("distanceMeters"),
+  isWithinRadius: boolean("isWithinRadius").default(false).notNull(),
+  // Schedule period info
+  scheduledDate: timestamp("scheduledDate").notNull(), // The date this check-in was scheduled for
+  periodStart: varchar("periodStart", { length: 8 }).notNull(), // "08:00"
+  periodEnd: varchar("periodEnd", { length: 8 }).notNull(), // "10:00"
+  checkinTime: timestamp("checkinTime").notNull(), // Actual time of check-in (middle of period)
+  status: mysqlEnum("status", ["pending", "completed", "failed", "missed"]).default("pending").notNull(),
+  errorMessage: text("errorMessage"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type AutomaticCheckin = typeof automaticCheckins.$inferSelect;
+export type InsertAutomaticCheckin = typeof automaticCheckins.$inferInsert;
+
+/**
+ * User Location Updates - tracks user locations for automatic check-in verification
+ * Users can update their location periodically for the system to verify proximity
+ */
+export const userLocationUpdates = mysqlTable("user_location_updates", {
+  id: int("id").autoincrement().primaryKey(),
+  nfcUserId: int("nfcUserId").notNull(),
+  latitude: varchar("latitude", { length: 32 }).notNull(),
+  longitude: varchar("longitude", { length: 32 }).notNull(),
+  accuracy: int("accuracy"), // GPS accuracy in meters
+  deviceInfo: text("deviceInfo"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type UserLocationUpdate = typeof userLocationUpdates.$inferSelect;
+export type InsertUserLocationUpdate = typeof userLocationUpdates.$inferInsert;

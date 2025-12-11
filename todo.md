@@ -52,3 +52,11 @@
 - [x] Implementar API de check-in com validação de proximidade
 - [x] Interface para configurar raio de proximidade por tag
 - [x] Visualização de check-ins no dashboard
+
+## Módulo de Check-in Automático
+- [x] Schema para agendamentos de check-in (dias da semana, horário início/fim, tag associada)
+- [x] API CRUD para gerenciar agendamentos
+- [x] Lógica de verificação de usuários no raio durante período agendado
+- [x] Sistema de check-in automático no meio do período
+- [x] Interface de gerenciamento de agendamentos no dashboard
+- [x] Histórico de check-ins automáticos

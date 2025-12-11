@@ -37,6 +37,24 @@ vi.mock("./db", () => ({
   getCheckinsByUserId: vi.fn().mockResolvedValue([]),
   getAllCheckins: vi.fn().mockResolvedValue([]),
   getCheckinStats: vi.fn().mockResolvedValue({ totalCheckins: 10, checkinsWithinRadius: 8, checkinsOutsideRadius: 2, checkinsToday: 3 }),
+  // Schedule functions
+  createCheckinSchedule: vi.fn().mockResolvedValue({ id: 1 }),
+  getCheckinScheduleById: vi.fn().mockResolvedValue({ id: 1, tagId: 1, name: "Test Schedule", daysOfWeek: "0,6", startTime: "08:00", endTime: "10:00", isActive: true }),
+  getCheckinSchedulesByTagId: vi.fn().mockResolvedValue([]),
+  getAllCheckinSchedules: vi.fn().mockResolvedValue([]),
+  getActiveSchedulesForDay: vi.fn().mockResolvedValue([]),
+  updateCheckinSchedule: vi.fn().mockResolvedValue(undefined),
+  deleteCheckinSchedule: vi.fn().mockResolvedValue(undefined),
+  // Automatic check-in functions
+  createAutomaticCheckin: vi.fn().mockResolvedValue({ id: 1 }),
+  getAllAutomaticCheckins: vi.fn().mockResolvedValue([]),
+  getAutomaticCheckinsByScheduleId: vi.fn().mockResolvedValue([]),
+  updateAutomaticCheckinStatus: vi.fn().mockResolvedValue(undefined),
+  // User location functions
+  createUserLocationUpdate: vi.fn().mockResolvedValue({ id: 1 }),
+  getLatestUserLocation: vi.fn().mockResolvedValue(null),
+  getUsersWithRecentLocation: vi.fn().mockResolvedValue([]),
+  getUsersByTagIdWithRecentLocation: vi.fn().mockResolvedValue([]),
 }));
 
 type AuthenticatedUser = NonNullable<TrpcContext["user"]>;

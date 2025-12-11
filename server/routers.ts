@@ -11,7 +11,10 @@ import {
   createConnectionLog, getConnectionLogs, getConnectionLogsByTagId, getConnectionLogsByUserId,
   createDynamicLink, getDynamicLinkByShortCode, getDynamicLinksByUserId, getAllDynamicLinks, updateDynamicLink, incrementLinkClickCount, deleteDynamicLink,
   createCheckin, getCheckinsByTagId, getCheckinsByUserId, getAllCheckins, getCheckinStats,
-  getStats
+  getStats,
+  createCheckinSchedule, getCheckinScheduleById, getCheckinSchedulesByTagId, getAllCheckinSchedules, getActiveSchedulesForDay, updateCheckinSchedule, deleteCheckinSchedule,
+  createAutomaticCheckin, getAllAutomaticCheckins, getAutomaticCheckinsByScheduleId, updateAutomaticCheckinStatus,
+  createUserLocationUpdate, getLatestUserLocation, getUsersWithRecentLocation, getUsersByTagIdWithRecentLocation
 } from "./db";
 
 // Helper function to calculate distance between two coordinates (Haversine formula)
@@ -469,6 +472,219 @@ export const appRouter = router({
     stats: adminProcedure.query(async () => {
       return getCheckinStats();
     }),
+  }),
+
+  // ============ CHECK-IN SCHEDULE ROUTES ============
+  schedules: router({
+    // Admin: list all schedules
+    list: adminProcedure.query(async () => {
+      return getAllCheckinSchedules();
+    }),
+
+    // Admin: get schedule by ID
+    byId: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        const schedule = await getCheckinScheduleById(input.id);
+        if (!schedule) throw new TRPCError({ code: 'NOT_FOUND', message: 'Agendamento não encontrado' });
+        return schedule;
+      }),
+
+    // Admin: get schedules by tag
+    byTag: adminProcedure
+      .input(z.object({ tagId: z.number() }))
+      .query(async ({ input }) => {
+        return getCheckinSchedulesByTagId(input.tagId);
+      }),
+
+    // Admin: create schedule
+    create: adminProcedure
+      .input(z.object({
+        tagId: z.number(),
+        name: z.string().optional(),
+        description: z.string().optional(),
+        daysOfWeek: z.string(), // "0,3,6" for Sun, Wed, Sat
+        startTime: z.string(), // "08:00"
+        endTime: z.string(), // "10:00"
+        timezone: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        // Validate tag exists and has geolocation
+        const tag = await getNfcTagById(input.tagId);
+        if (!tag) throw new TRPCError({ code: 'NOT_FOUND', message: 'Tag não encontrada' });
+        if (!tag.latitude || !tag.longitude) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Tag precisa ter localização configurada para agendamentos' });
+        }
+        if (!tag.enableCheckin) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Tag precisa ter check-in habilitado' });
+        }
+
+        // Validate time format
+        const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
+        if (!timeRegex.test(input.startTime) || !timeRegex.test(input.endTime)) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Formato de horário inválido. Use HH:MM' });
+        }
+
+        // Validate days of week
+        const days = input.daysOfWeek.split(',').map(d => parseInt(d.trim()));
+        if (days.some(d => isNaN(d) || d < 0 || d > 6)) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Dias da semana inválidos. Use 0-6 (0=Domingo)' });
+        }
+
+        return createCheckinSchedule({
+          tagId: input.tagId,
+          name: input.name || null,
+          description: input.description || null,
+          daysOfWeek: input.daysOfWeek,
+          startTime: input.startTime,
+          endTime: input.endTime,
+          timezone: input.timezone || 'America/Sao_Paulo',
+        });
+      }),
+
+    // Admin: update schedule
+    update: adminProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().optional(),
+        description: z.string().optional(),
+        daysOfWeek: z.string().optional(),
+        startTime: z.string().optional(),
+        endTime: z.string().optional(),
+        isActive: z.boolean().optional(),
+        timezone: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        await updateCheckinSchedule(id, data);
+        return { success: true };
+      }),
+
+    // Admin: delete schedule
+    delete: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await deleteCheckinSchedule(input.id);
+        return { success: true };
+      }),
+
+    // Admin: trigger automatic check-in for a schedule (manual trigger for testing)
+    triggerCheckin: adminProcedure
+      .input(z.object({ scheduleId: z.number() }))
+      .mutation(async ({ input }) => {
+        const schedule = await getCheckinScheduleById(input.scheduleId);
+        if (!schedule) throw new TRPCError({ code: 'NOT_FOUND', message: 'Agendamento não encontrado' });
+
+        const tag = await getNfcTagById(schedule.tagId);
+        if (!tag || !tag.latitude || !tag.longitude) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Tag sem localização configurada' });
+        }
+
+        // Get users with recent location for this tag
+        const usersWithLocation = await getUsersByTagIdWithRecentLocation(schedule.tagId, 60);
+
+        const results = [];
+        const now = new Date();
+
+        for (const { user, location } of usersWithLocation) {
+          const userLat = parseFloat(location.latitude);
+          const userLon = parseFloat(location.longitude);
+          const tagLat = parseFloat(tag.latitude);
+          const tagLon = parseFloat(tag.longitude);
+
+          const distance = Math.round(calculateDistance(tagLat, tagLon, userLat, userLon));
+          const isWithinRadius = distance <= (tag.radiusMeters || 100);
+
+          // Create automatic check-in record
+          const checkinResult = await createAutomaticCheckin({
+            scheduleId: schedule.id,
+            tagId: schedule.tagId,
+            nfcUserId: user.id,
+            userLatitude: location.latitude,
+            userLongitude: location.longitude,
+            distanceMeters: distance,
+            isWithinRadius,
+            scheduledDate: now,
+            periodStart: schedule.startTime,
+            periodEnd: schedule.endTime,
+            checkinTime: now,
+            status: isWithinRadius ? 'completed' : 'failed',
+            errorMessage: isWithinRadius ? null : `Usuário fora do raio (${distance}m > ${tag.radiusMeters}m)`,
+          });
+
+          results.push({
+            userId: user.id,
+            userName: user.name,
+            distance,
+            isWithinRadius,
+            checkinId: checkinResult.id,
+          });
+        }
+
+        return {
+          success: true,
+          scheduleName: schedule.name,
+          usersProcessed: results.length,
+          usersWithinRadius: results.filter(r => r.isWithinRadius).length,
+          results,
+        };
+      }),
+  }),
+
+  // ============ AUTOMATIC CHECK-IN ROUTES ============
+  automaticCheckins: router({
+    // Admin: list all automatic check-ins
+    list: adminProcedure
+      .input(z.object({ limit: z.number().optional() }).optional())
+      .query(async ({ input }) => {
+        return getAllAutomaticCheckins(input?.limit || 100);
+      }),
+
+    // Admin: get by schedule
+    bySchedule: adminProcedure
+      .input(z.object({ scheduleId: z.number(), limit: z.number().optional() }))
+      .query(async ({ input }) => {
+        return getAutomaticCheckinsByScheduleId(input.scheduleId, input.limit || 100);
+      }),
+  }),
+
+  // ============ USER LOCATION ROUTES ============
+  userLocation: router({
+    // Public: update user location (for automatic check-in)
+    update: publicProcedure
+      .input(z.object({
+        tagUid: z.string(),
+        latitude: z.string(),
+        longitude: z.string(),
+        accuracy: z.number().optional(),
+        deviceInfo: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        // Find tag and user
+        const tag = await getNfcTagByUid(input.tagUid);
+        if (!tag) throw new TRPCError({ code: 'NOT_FOUND', message: 'Tag não encontrada' });
+
+        const user = await getNfcUserByTagId(tag.id);
+        if (!user) throw new TRPCError({ code: 'NOT_FOUND', message: 'Usuário não encontrado. Registre-se primeiro.' });
+
+        // Save location update
+        await createUserLocationUpdate({
+          nfcUserId: user.id,
+          latitude: input.latitude,
+          longitude: input.longitude,
+          accuracy: input.accuracy || null,
+          deviceInfo: input.deviceInfo || null,
+        });
+
+        return { success: true, userId: user.id };
+      }),
+
+    // Admin: get users with recent location
+    recentLocations: adminProcedure
+      .input(z.object({ minutesAgo: z.number().optional() }).optional())
+      .query(async ({ input }) => {
+        return getUsersWithRecentLocation(input?.minutesAgo || 30);
+      }),
   }),
 
   // ============ STATS ROUTES ============
