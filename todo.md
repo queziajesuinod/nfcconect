@@ -111,3 +111,10 @@
 - [x] Permitir enviar link personalizado para usuários já cadastrados
 - [x] Corrigir página UserApp para funcionar apenas com deviceId (sem precisar de uid da tag)
 - [x] Forçar geolocalização obrigatória no cadastro novo
+
+## Reorganização da Página de Agendamentos
+- [x] Separar configuração de todos os agendamentos da execução do dia
+- [x] Seção de configuração: listar todos os agendamentos cadastrados com CRUD
+- [x] Seção de execução do dia: mostrar apenas agendamentos aplicáveis ao dia/período atual
+- [x] Botão de executar apenas nos agendamentos do dia/período atual
+- [x] Histórico de check-ins filtrado apenas para o dia atual
