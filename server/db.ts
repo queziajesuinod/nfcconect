@@ -164,6 +164,23 @@ export async function getNfcUserByTagId(tagId: number) {
   return result[0];
 }
 
+export async function getNfcUserByTagIdAndDeviceId(tagId: number, deviceId: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const result = await db.select().from(nfcUsers)
+    .where(and(eq(nfcUsers.tagId, tagId), eq(nfcUsers.deviceId, deviceId)))
+    .limit(1);
+  return result[0];
+}
+
+export async function getAllNfcUsersByTagId(tagId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return db.select().from(nfcUsers).where(eq(nfcUsers.tagId, tagId)).orderBy(desc(nfcUsers.createdAt));
+}
+
 export async function getNfcUserById(id: number) {
   const db = await getDb();
   if (!db) return undefined;
@@ -179,6 +196,7 @@ export async function getAllNfcUsers() {
   const result = await db.select({
     id: nfcUsers.id,
     tagId: nfcUsers.tagId,
+    deviceId: nfcUsers.deviceId,
     name: nfcUsers.name,
     email: nfcUsers.email,
     phone: nfcUsers.phone,

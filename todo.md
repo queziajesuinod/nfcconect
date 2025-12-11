@@ -86,3 +86,10 @@
 - [ ] Criar docker-compose.yml com Traefik
 - [ ] Criar arquivo .env.example
 - [ ] Documentação de deploy
+
+## Múltiplos Usuários por Tag
+- [x] Adicionar campo deviceId no schema de nfcUsers
+- [x] Gerar Device ID único no localStorage do navegador
+- [x] Atualizar lógica de verificação para identificar por tag + dispositivo
+- [x] Atualizar lógica de registro para incluir deviceId
+- [x] Permitir múltiplos usuários registrados na mesma tag

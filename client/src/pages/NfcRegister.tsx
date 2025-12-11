@@ -19,6 +19,23 @@ interface GeoLocation {
   accuracy: number;
 }
 
+// Generate or retrieve unique device ID
+function getDeviceId(): string {
+  const DEVICE_ID_KEY = 'nfc_device_id';
+  let deviceId = localStorage.getItem(DEVICE_ID_KEY);
+  if (!deviceId) {
+    // Generate a unique ID using crypto API or fallback
+    deviceId = crypto.randomUUID ? crypto.randomUUID() : 
+      'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    localStorage.setItem(DEVICE_ID_KEY, deviceId);
+  }
+  return deviceId;
+}
+
 export default function NfcRegister() {
   const search = useSearch();
   const params = new URLSearchParams(search);
@@ -31,11 +48,14 @@ export default function NfcRegister() {
   const [location, setLocation] = useState<GeoLocation | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
+  
+  // Get unique device ID
+  const deviceId = getDeviceId();
 
-  // Check if user already exists for this tag
+  // Check if user already exists for this tag AND device
   const { data: checkData, isLoading: isChecking, error: checkError } = trpc.nfcUsers.checkByTagUid.useQuery(
-    { tagUid },
-    { enabled: !!tagUid }
+    { tagUid, deviceId },
+    { enabled: !!tagUid && !!deviceId }
   );
 
   const registerMutation = trpc.nfcUsers.register.useMutation({
@@ -134,6 +154,7 @@ export default function NfcRegister() {
     }
     registerMutation.mutate({
       tagUid,
+      deviceId,
       name: formData.name || undefined,
       email: formData.email || undefined,
       phone: formData.phone || undefined,
@@ -147,6 +168,7 @@ export default function NfcRegister() {
   const handleSkipRegister = () => {
     registerMutation.mutate({
       tagUid,
+      deviceId,
       userAgent: navigator.userAgent,
       deviceInfo: `${navigator.platform} - ${navigator.language}`,
       latitude: location?.latitude,

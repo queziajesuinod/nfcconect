@@ -15,7 +15,8 @@ vi.mock("./db", () => ({
   deleteNfcTag: vi.fn().mockResolvedValue(undefined),
   createNfcUser: vi.fn().mockResolvedValue({ id: 1 }),
   getNfcUserByTagId: vi.fn().mockResolvedValue(null),
-  getNfcUserById: vi.fn().mockResolvedValue({ id: 1, tagId: 1, name: "Test User" }),
+  getNfcUserByTagIdAndDeviceId: vi.fn().mockResolvedValue(null),
+  getNfcUserById: vi.fn().mockResolvedValue({ id: 1, tagId: 1, name: "Test User", deviceId: "test-device-id" }),
   getAllNfcUsers: vi.fn().mockResolvedValue([]),
   updateNfcUser: vi.fn().mockResolvedValue(undefined),
   validateNfcUser: vi.fn().mockResolvedValue(undefined),
@@ -50,6 +51,7 @@ vi.mock("./db", () => ({
   getAllAutomaticCheckins: vi.fn().mockResolvedValue([]),
   getAutomaticCheckinsByScheduleId: vi.fn().mockResolvedValue([]),
   updateAutomaticCheckinStatus: vi.fn().mockResolvedValue(undefined),
+  hasUserCheckinForScheduleToday: vi.fn().mockResolvedValue(false),
   // User location functions
   createUserLocationUpdate: vi.fn().mockResolvedValue({ id: 1 }),
   getLatestUserLocation: vi.fn().mockResolvedValue(null),
@@ -197,6 +199,7 @@ describe("NFC User Registration", () => {
 
     const result = await caller.nfcUsers.register({
       tagUid: "NEW-TAG-UID",
+      deviceId: "test-device-id-12345",
       name: "John Doe",
       email: "john@example.com",
     });

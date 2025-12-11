@@ -46,6 +46,7 @@ export type InsertNfcTag = typeof nfcTags.$inferInsert;
 export const nfcUsers = mysqlTable("nfc_users", {
   id: int("id").autoincrement().primaryKey(),
   tagId: int("tagId").notNull(),
+  deviceId: varchar("deviceId", { length: 64 }).notNull(), // Unique device identifier
   name: varchar("name", { length: 255 }),
   email: varchar("email", { length: 320 }),
   phone: varchar("phone", { length: 32 }),

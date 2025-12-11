@@ -1,0 +1,1 @@
+ALTER TABLE `nfc_users` ADD `deviceId` varchar(64) NOT NULL;

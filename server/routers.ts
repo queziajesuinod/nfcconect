@@ -7,7 +7,7 @@ import { nanoid } from "nanoid";
 import { TRPCError } from "@trpc/server";
 import {
   createNfcTag, getNfcTagByUid, getNfcTagById, getAllNfcTags, updateNfcTag, deleteNfcTag,
-  createNfcUser, getNfcUserByTagId, getNfcUserById, getAllNfcUsers, updateNfcUser, validateNfcUser, deleteNfcUser,
+  createNfcUser, getNfcUserByTagId, getNfcUserByTagIdAndDeviceId, getNfcUserById, getAllNfcUsers, updateNfcUser, validateNfcUser, deleteNfcUser,
   createConnectionLog, getConnectionLogs, getConnectionLogsByTagId, getConnectionLogsByUserId,
   createDynamicLink, getDynamicLinkByShortCode, getDynamicLinksByUserId, getAllDynamicLinks, updateDynamicLink, incrementLinkClickCount, deleteDynamicLink,
   createCheckin, getCheckinsByTagId, getCheckinsByUserId, getAllCheckins, getCheckinStats,
@@ -137,9 +137,9 @@ export const appRouter = router({
         return getNfcUserByTagId(input.tagId);
       }),
 
-    // Check if user exists for a tag UID (public - for auto-redirect)
+    // Check if user exists for a tag UID and device (public - for auto-redirect)
     checkByTagUid: publicProcedure
-      .input(z.object({ tagUid: z.string() }))
+      .input(z.object({ tagUid: z.string(), deviceId: z.string() }))
       .query(async ({ input, ctx }) => {
         const tag = await getNfcTagByUid(input.tagUid);
         if (!tag) {
@@ -150,7 +150,8 @@ export const appRouter = router({
           throw new TRPCError({ code: 'FORBIDDEN', message: 'Esta tag está bloqueada' });
         }
         
-        const existingUser = await getNfcUserByTagId(tag.id);
+        // Check by tag AND device - allows multiple users per tag
+        const existingUser = await getNfcUserByTagIdAndDeviceId(tag.id, input.deviceId);
         if (existingUser) {
           // Update last connection and log
           await updateNfcUser(existingUser.id, { lastConnectionAt: new Date() });
@@ -176,6 +177,7 @@ export const appRouter = router({
     register: publicProcedure
       .input(z.object({
         tagUid: z.string().min(1),
+        deviceId: z.string().min(1), // Unique device identifier
         name: z.string().optional(),
         email: z.string().email().optional(),
         phone: z.string().optional(),
@@ -198,8 +200,8 @@ export const appRouter = router({
           throw new TRPCError({ code: 'FORBIDDEN', message: 'Esta tag está bloqueada' });
         }
 
-        // Check if user already exists for this tag
-        const existingUser = await getNfcUserByTagId(tag.id);
+        // Check if user already exists for this tag AND device
+        const existingUser = await getNfcUserByTagIdAndDeviceId(tag.id, input.deviceId);
         if (existingUser) {
           // Update last connection and log
           await updateNfcUser(existingUser.id, { lastConnectionAt: new Date() });
@@ -219,12 +221,13 @@ export const appRouter = router({
           };
         }
 
-        // Create new NFC user with geolocation
+        // Create new NFC user with geolocation and device ID
         const ipAddress = ctx.req.ip || ctx.req.headers['x-forwarded-for'] as string || null;
         const userAgent = input.userAgent || ctx.req.headers['user-agent'] || null;
         
         const result = await createNfcUser({
           tagId: tag.id,
+          deviceId: input.deviceId,
           name: input.name || null,
           email: input.email || null,
           phone: input.phone || null,
