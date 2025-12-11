@@ -77,3 +77,12 @@
 - [x] Corrigir página de Check-ins que não está funcionando
 - [x] Evitar check-ins duplicados no mesmo período de agendamento
 - [x] Redirecionar para URL da tag após primeiro cadastro
+
+## Deploy Externo (Docker/Portainer/Traefik) - ADIADO
+- [ ] Converter Drizzle ORM de MySQL para PostgreSQL
+- [ ] Atualizar schema.ts para sintaxe PostgreSQL
+- [ ] Atualizar db.ts para driver PostgreSQL
+- [ ] Criar Dockerfile para produção
+- [ ] Criar docker-compose.yml com Traefik
+- [ ] Criar arquivo .env.example
+- [ ] Documentação de deploy

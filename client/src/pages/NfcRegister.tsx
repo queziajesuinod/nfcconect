@@ -116,6 +116,16 @@ export default function NfcRegister() {
     }
   }, [checkData]);
 
+  // Auto redirect after registration to tag URL
+  useEffect(() => {
+    if (isRegistered && redirectUrl) {
+      const timer = setTimeout(() => {
+        window.location.href = redirectUrl;
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [isRegistered, redirectUrl]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!tagUid) {
@@ -244,16 +254,6 @@ export default function NfcRegister() {
       </div>
     );
   }
-
-  // Registration completed - auto redirect to tag URL
-  useEffect(() => {
-    if (isRegistered && redirectUrl) {
-      const timer = setTimeout(() => {
-        window.location.href = redirectUrl;
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [isRegistered, redirectUrl]);
 
   // Registration completed
   if (isRegistered) {
