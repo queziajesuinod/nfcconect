@@ -669,6 +669,34 @@ export const appRouter = router({
         const schedule = await getCheckinScheduleById(input.scheduleId);
         if (!schedule) throw new TRPCError({ code: 'NOT_FOUND', message: 'Agendamento não encontrado' });
 
+        // Validate current time is within schedule period
+        const now = new Date();
+        const currentMinutes = now.getHours() * 60 + now.getMinutes();
+        
+        const [startH, startM] = schedule.startTime.split(':').map(Number);
+        const [endH, endM] = schedule.endTime.split(':').map(Number);
+        const startMinutes = startH * 60 + startM;
+        const endMinutes = endH * 60 + endM;
+        
+        if (currentMinutes < startMinutes || currentMinutes > endMinutes) {
+          const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+          throw new TRPCError({ 
+            code: 'BAD_REQUEST', 
+            message: `Horário atual (${currentTime}) está fora do período configurado (${schedule.startTime} - ${schedule.endTime}). Check-in não permitido.` 
+          });
+        }
+
+        // Validate current day is in schedule days
+        const currentDay = now.getDay();
+        const scheduleDays = schedule.daysOfWeek.split(',').map(d => parseInt(d.trim()));
+        if (!scheduleDays.includes(currentDay)) {
+          const dayNames = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+          throw new TRPCError({ 
+            code: 'BAD_REQUEST', 
+            message: `Hoje (${dayNames[currentDay]}) não está configurado para este agendamento. Check-in não permitido.` 
+          });
+        }
+
         // Get all tags for this schedule
         const tagRelations = await getScheduleTagRelations(input.scheduleId);
         
@@ -704,7 +732,6 @@ export const appRouter = router({
 
         const results: Array<{ userId: number; userName: string | null; tagName: string | null; distance: number; isWithinRadius: boolean; checkinId: number }> = [];
         const skipped: Array<{ userId: number; userName: string | null; reason: string }> = [];
-        const now = new Date();
         const processedUsers = new Set<number>(); // Track users already processed
 
         // Process each tag

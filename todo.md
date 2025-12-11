@@ -125,3 +125,7 @@
 - [x] Adicionar opção "Todas as Tags" no cadastro
 - [x] Permitir editar tags em agendamentos existentes
 - [x] Atualizar lógica de execução de check-in para processar múltiplas tags
+
+## Validação de Horário para Execução de Check-in
+- [x] Bloquear execução de check-in fora do período configurado
+- [x] Mostrar mensagem de erro quando tentar executar fora do horário
