@@ -136,15 +136,7 @@ export default function NfcRegister() {
     }
   }, [checkData]);
 
-  // Auto redirect after registration to tag URL
-  useEffect(() => {
-    if (isRegistered && redirectUrl) {
-      const timer = setTimeout(() => {
-        window.location.href = redirectUrl;
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [isRegistered, redirectUrl]);
+  // Removed auto-redirect - user should activate location first
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -279,60 +271,33 @@ export default function NfcRegister() {
 
   // Registration completed
   if (isRegistered) {
-    const appUrl = `/app?uid=${tagUid}`;
+    const appUrl = `/app?uid=${tagUid}${redirectUrl ? `&redirect=${encodeURIComponent(redirectUrl)}` : ''}`;
     
-    // If there's a redirect URL, show redirecting message
-    if (redirectUrl) {
-      return (
-        <div className="min-h-screen bg-white flex items-center justify-center p-4">
-          <div className="border-4 border-black p-8 md:p-12 brutal-shadow max-w-md w-full text-center">
-            <div className="w-20 h-20 bg-green-600 flex items-center justify-center mx-auto mb-6">
-              <CheckCircle className="w-12 h-12 text-white" />
-            </div>
-            <h2 className="mb-4">Registro Concluído!</h2>
-            <p className="text-gray-600 mb-6">
-              Seu registro foi realizado com sucesso.
-            </p>
-            <div className="flex items-center justify-center gap-2 text-gray-500 mb-4">
-              <Loader2 className="w-5 h-5 animate-spin" />
-              <span>Redirecionando...</span>
-            </div>
-            <Button 
-              onClick={handleRedirect}
-              className="w-full brutal-shadow-sm hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all font-bold uppercase"
-            >
-              Continuar agora <ArrowRight className="ml-2 w-5 h-5" />
-            </Button>
-          </div>
-        </div>
-      );
-    }
-    
-    // No redirect URL - show app installation option
+    // Always show app installation option first
     return (
       <div className="min-h-screen bg-white flex items-center justify-center p-4">
         <div className="border-4 border-black p-8 md:p-12 brutal-shadow max-w-md w-full text-center">
           <div className="w-20 h-20 bg-green-600 flex items-center justify-center mx-auto mb-6">
             <CheckCircle className="w-12 h-12 text-white" />
           </div>
-          <h2 className="mb-4">Conectado!</h2>
-          <p className="text-gray-600 mb-6">
+          <h2 className="mb-4">Registro Concluído!</h2>
+          <p className="text-gray-600 mb-4">
             {registerMutation.data?.isNewUser 
               ? "Seu registro foi realizado com sucesso."
               : "Bem-vindo de volta! Sua conexão foi registrada."
             }
           </p>
           
-          {/* App Installation Card */}
-          <div className="bg-yellow-50 border-4 border-yellow-500 p-4 mb-6 text-left">
+          {/* App Installation Card - IMPORTANT */}
+          <div className="bg-blue-50 border-4 border-blue-600 p-4 mb-6 text-left">
             <div className="flex items-start gap-3">
-              <div className="w-10 h-10 bg-yellow-500 flex items-center justify-center shrink-0">
-                <Smartphone className="w-6 h-6 text-white" />
+              <div className="w-12 h-12 bg-blue-600 flex items-center justify-center shrink-0">
+                <MapPin className="w-7 h-7 text-white" />
               </div>
               <div>
-                <h4 className="font-bold text-sm mb-1">INSTALE O APP</h4>
-                <p className="text-xs text-gray-600">
-                  Para check-in automático, instale o app no seu celular.
+                <h4 className="font-bold text-sm mb-1 text-blue-800">IMPORTANTE: ATIVE A LOCALIZAÇÃO</h4>
+                <p className="text-xs text-gray-700">
+                  Para o check-in automático funcionar, você precisa instalar o app e ativar a sincronização de localização.
                 </p>
               </div>
             </div>
@@ -342,12 +307,24 @@ export default function NfcRegister() {
             onClick={() => window.location.href = appUrl}
             className="w-full brutal-shadow-sm hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all font-bold uppercase text-lg py-6 h-auto mb-4 bg-blue-600 hover:bg-blue-700"
           >
-            <Download className="mr-2 w-5 h-5" /> Instalar App
+            <Download className="mr-2 w-5 h-5" /> Ativar Localização
           </Button>
           
-          <p className="text-sm text-gray-500 mt-4">
-            Ou você pode fechar esta página.
-          </p>
+          {redirectUrl && (
+            <Button 
+              variant="outline"
+              onClick={handleRedirect}
+              className="w-full border-2 border-black hover:bg-gray-100 font-bold uppercase"
+            >
+              Pular e continuar <ArrowRight className="ml-2 w-5 h-5" />
+            </Button>
+          )}
+          
+          {!redirectUrl && (
+            <p className="text-sm text-gray-500 mt-4">
+              Ou você pode fechar esta página.
+            </p>
+          )}
         </div>
       </div>
     );

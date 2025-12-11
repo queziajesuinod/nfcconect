@@ -47,6 +47,7 @@ export default function UserApp() {
   const searchString = useSearch();
   const params = new URLSearchParams(searchString);
   const tagUid = params.get("uid");
+  const redirectUrl = params.get("redirect"); // URL to redirect after activation
   const [deviceId] = useState(() => getDeviceId());
 
   const [isInstalled, setIsInstalled] = useState(false);
@@ -590,6 +591,26 @@ export default function UserApp() {
             </ol>
           </CardContent>
         </Card>
+
+        {/* Continue Button - show if there's a redirect URL */}
+        {redirectUrl && (
+          <Card className="border-4 border-green-600 bg-green-50">
+            <CardContent className="py-4 space-y-3">
+              <p className="text-green-800 font-medium text-center">
+                {autoSync || syncState.lastSync 
+                  ? "Localização ativada! Você pode continuar."
+                  : "Ative a sincronização para check-in automático."
+                }
+              </p>
+              <Button 
+                onClick={() => window.location.href = decodeURIComponent(redirectUrl)}
+                className="w-full bg-green-600 hover:bg-green-700 font-bold text-lg py-6 h-auto"
+              >
+                CONTINUAR
+              </Button>
+            </CardContent>
+          </Card>
+        )}
       </main>
     </div>
   );

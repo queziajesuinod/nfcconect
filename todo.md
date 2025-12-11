@@ -103,3 +103,4 @@
 
 ## Correções Urgentes
 - [x] Verificar e manter campos de geolocalização do usuário para check-in (já estava funcionando)
+- [x] Corrigir redirecionamento após cadastro para o app PWA
