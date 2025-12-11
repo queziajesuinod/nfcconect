@@ -158,3 +158,8 @@
 ## Evitar Check-in Duplicado por Agendamento
 - [x] Verificar se usuário já fez check-in em qualquer tag do mesmo agendamento no dia
 - [x] Se já fez check-in, apenas redirecionar sem registrar novamente
+
+## Reconhecer Usuário Existente em Nova Tag
+- [x] Quando usuário já cadastrado conecta em nova tag, reconhecer pelo deviceId
+- [x] Criar relação usuário-tag automaticamente sem pedir registro
+- [x] Fazer check-in automático para usuário reconhecido

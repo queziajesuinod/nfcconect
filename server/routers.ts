@@ -193,6 +193,27 @@ export const appRouter = router({
               user: existingUser, 
               redirectUrl: tag.redirectUrl 
             };
+          } else {
+            // User exists but not connected to this tag - create relation automatically
+            await createUserTagRelation({
+              userId: existingUser.id,
+              tagId: tag.id,
+            });
+            await updateNfcUser(existingUser.id, { lastConnectionAt: new Date() });
+            await createConnectionLog({
+              tagId: tag.id,
+              nfcUserId: existingUser.id,
+              action: 'first_read',
+              ipAddress: ctx.req.ip || ctx.req.headers['x-forwarded-for'] as string || null,
+              userAgent: ctx.req.headers['user-agent'] || null,
+            });
+            // Return as existing user so check-in flow proceeds
+            return { 
+              exists: true, 
+              tag, 
+              user: existingUser, 
+              redirectUrl: tag.redirectUrl 
+            };
           }
         }
         
