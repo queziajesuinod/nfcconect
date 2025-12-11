@@ -76,3 +76,4 @@
 ## Bugs
 - [x] Corrigir página de Check-ins que não está funcionando
 - [x] Evitar check-ins duplicados no mesmo período de agendamento
+- [x] Redirecionar para URL da tag após primeiro cadastro

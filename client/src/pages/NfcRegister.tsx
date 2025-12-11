@@ -245,10 +245,48 @@ export default function NfcRegister() {
     );
   }
 
+  // Registration completed - auto redirect to tag URL
+  useEffect(() => {
+    if (isRegistered && redirectUrl) {
+      const timer = setTimeout(() => {
+        window.location.href = redirectUrl;
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [isRegistered, redirectUrl]);
+
   // Registration completed
   if (isRegistered) {
     const appUrl = `/app?uid=${tagUid}`;
     
+    // If there's a redirect URL, show redirecting message
+    if (redirectUrl) {
+      return (
+        <div className="min-h-screen bg-white flex items-center justify-center p-4">
+          <div className="border-4 border-black p-8 md:p-12 brutal-shadow max-w-md w-full text-center">
+            <div className="w-20 h-20 bg-green-600 flex items-center justify-center mx-auto mb-6">
+              <CheckCircle className="w-12 h-12 text-white" />
+            </div>
+            <h2 className="mb-4">Registro Concluído!</h2>
+            <p className="text-gray-600 mb-6">
+              Seu registro foi realizado com sucesso.
+            </p>
+            <div className="flex items-center justify-center gap-2 text-gray-500 mb-4">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span>Redirecionando...</span>
+            </div>
+            <Button 
+              onClick={handleRedirect}
+              className="w-full brutal-shadow-sm hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all font-bold uppercase"
+            >
+              Continuar agora <ArrowRight className="ml-2 w-5 h-5" />
+            </Button>
+          </div>
+        </div>
+      );
+    }
+    
+    // No redirect URL - show app installation option
     return (
       <div className="min-h-screen bg-white flex items-center justify-center p-4">
         <div className="border-4 border-black p-8 md:p-12 brutal-shadow max-w-md w-full text-center">
@@ -285,21 +323,9 @@ export default function NfcRegister() {
             <Download className="mr-2 w-5 h-5" /> Instalar App
           </Button>
           
-          {redirectUrl && (
-            <Button 
-              onClick={handleRedirect}
-              variant="outline"
-              className="w-full border-2 border-black font-bold uppercase"
-            >
-              Continuar sem instalar <ArrowRight className="ml-2 w-5 h-5" />
-            </Button>
-          )}
-          
-          {!redirectUrl && (
-            <p className="text-sm text-gray-500 mt-4">
-              Ou você pode fechar esta página.
-            </p>
-          )}
+          <p className="text-sm text-gray-500 mt-4">
+            Ou você pode fechar esta página.
+          </p>
         </div>
       </div>
     );
