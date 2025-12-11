@@ -129,3 +129,11 @@
 ## Validação de Horário para Execução de Check-in
 - [x] Bloquear execução de check-in fora do período configurado
 - [x] Mostrar mensagem de erro quando tentar executar fora do horário
+
+## Unificação de Check-ins e Timezone
+- [x] Implementar timezone Campo Grande MS (UTC-4) para validação de horários
+- [x] Unificar visualização de check-ins manuais e automáticos na mesma página
+- [x] Criar botão de check-in manual na página de tag NFC
+- [x] Validar se existe agendamento ativo no período para habilitar check-in manual
+- [x] Evitar duplicação: se fez check-in manual, não processar no automático
+- [x] Manter redirecionamento funcionando independente de agendamento

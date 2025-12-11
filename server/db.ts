@@ -1,4 +1,4 @@
-import { eq, desc, sql, and, gte, lte } from "drizzle-orm";
+import { eq, desc, sql, and, gte, lte, or, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { 
   InsertUser, users, 
@@ -968,4 +968,190 @@ export async function getActiveSchedulesForDayWithTags(dayOfWeek: number) {
   }));
   
   return schedulesWithTags;
+}
+
+// ============ UNIFIED CHECK-IN FUNCTIONS ============
+
+// Get all check-ins (both manual and automatic) unified
+export async function getAllUnifiedCheckins(limit: number = 100) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  // Get automatic check-ins
+  const autoCheckins = await db.select({
+    id: automaticCheckins.id,
+    type: sql<string>`'automatic'`.as('type'),
+    nfcUserId: automaticCheckins.nfcUserId,
+    tagId: automaticCheckins.tagId,
+    scheduleId: automaticCheckins.scheduleId,
+    distanceMeters: automaticCheckins.distanceMeters,
+    isWithinRadius: automaticCheckins.isWithinRadius,
+    latitude: automaticCheckins.userLatitude,
+    longitude: automaticCheckins.userLongitude,
+    createdAt: automaticCheckins.createdAt,
+    userName: nfcUsers.name,
+    userEmail: nfcUsers.email,
+    tagUid: nfcTags.uid,
+    tagName: nfcTags.name,
+    scheduleName: checkinSchedules.name,
+    scheduleStartTime: checkinSchedules.startTime,
+    scheduleEndTime: checkinSchedules.endTime,
+  })
+    .from(automaticCheckins)
+    .leftJoin(nfcUsers, eq(automaticCheckins.nfcUserId, nfcUsers.id))
+    .leftJoin(nfcTags, eq(automaticCheckins.tagId, nfcTags.id))
+    .leftJoin(checkinSchedules, eq(automaticCheckins.scheduleId, checkinSchedules.id))
+    .orderBy(desc(automaticCheckins.createdAt))
+    .limit(limit);
+  
+  // Get manual check-ins
+  const manualCheckins = await db.select({
+    id: checkins.id,
+    type: sql<string>`'manual'`.as('type'),
+    nfcUserId: checkins.nfcUserId,
+    tagId: checkins.tagId,
+    scheduleId: sql<number | null>`NULL`.as('scheduleId'),
+    distanceMeters: checkins.distanceMeters,
+    isWithinRadius: checkins.isWithinRadius,
+    latitude: checkins.latitude,
+    longitude: checkins.longitude,
+    createdAt: checkins.createdAt,
+    userName: nfcUsers.name,
+    userEmail: nfcUsers.email,
+    tagUid: nfcTags.uid,
+    tagName: nfcTags.name,
+    scheduleName: sql<string | null>`NULL`.as('scheduleName'),
+    scheduleStartTime: sql<string | null>`NULL`.as('scheduleStartTime'),
+    scheduleEndTime: sql<string | null>`NULL`.as('scheduleEndTime'),
+  })
+    .from(checkins)
+    .leftJoin(nfcUsers, eq(checkins.nfcUserId, nfcUsers.id))
+    .leftJoin(nfcTags, eq(checkins.tagId, nfcTags.id))
+    .orderBy(desc(checkins.createdAt))
+    .limit(limit);
+  
+  // Combine and sort by createdAt
+  const allCheckins = [...autoCheckins, ...manualCheckins]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, limit);
+  
+  return allCheckins;
+}
+
+// Check if user already has any check-in (manual or automatic) for a tag today
+export async function hasUserCheckinForTagToday(tagId: number, nfcUserId: number, date: Date) {
+  const db = await getDb();
+  if (!db) return false;
+  
+  // Get start and end of the day
+  const startOfDay = new Date(date);
+  startOfDay.setHours(0, 0, 0, 0);
+  
+  const endOfDay = new Date(date);
+  endOfDay.setHours(23, 59, 59, 999);
+  
+  // Check automatic check-ins
+  const autoResult = await db.select({ count: sql<number>`count(*)` })
+    .from(automaticCheckins)
+    .where(
+      and(
+        eq(automaticCheckins.tagId, tagId),
+        eq(automaticCheckins.nfcUserId, nfcUserId),
+        gte(automaticCheckins.createdAt, startOfDay),
+        lte(automaticCheckins.createdAt, endOfDay)
+      )
+    );
+  
+  if ((autoResult[0]?.count || 0) > 0) return true;
+  
+  // Check manual check-ins
+  const manualResult = await db.select({ count: sql<number>`count(*)` })
+    .from(checkins)
+    .where(
+      and(
+        eq(checkins.tagId, tagId),
+        eq(checkins.nfcUserId, nfcUserId),
+        gte(checkins.createdAt, startOfDay),
+        lte(checkins.createdAt, endOfDay)
+      )
+    );
+  
+  return (manualResult[0]?.count || 0) > 0;
+}
+
+// Get active schedules for a specific tag at current time
+export async function getActiveScheduleForTag(tagId: number, dayOfWeek: number, currentMinutes: number) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  // First check scheduleTagRelations for the tag
+  const tagRelations = await db.select({
+    scheduleId: scheduleTagRelations.scheduleId,
+  })
+    .from(scheduleTagRelations)
+    .where(eq(scheduleTagRelations.tagId, tagId));
+  
+  const scheduleIds = tagRelations.map(r => r.scheduleId);
+  
+  // Get schedules that match the tag (either via relation or legacy tagId)
+  const schedules = await db.select()
+    .from(checkinSchedules)
+    .where(
+      and(
+        eq(checkinSchedules.isActive, true),
+        or(
+          scheduleIds.length > 0 ? inArray(checkinSchedules.id, scheduleIds) : undefined,
+          eq(checkinSchedules.tagId, tagId)
+        )
+      )
+    );
+  
+  // Filter by day and time
+  for (const schedule of schedules) {
+    const days = schedule.daysOfWeek.split(',').map(d => parseInt(d.trim()));
+    if (!days.includes(dayOfWeek)) continue;
+    
+    const [startH, startM] = schedule.startTime.split(':').map(Number);
+    const [endH, endM] = schedule.endTime.split(':').map(Number);
+    const startMinutes = startH * 60 + startM;
+    const endMinutes = endH * 60 + endM;
+    
+    if (currentMinutes >= startMinutes && currentMinutes <= endMinutes) {
+      return schedule;
+    }
+  }
+  
+  return null;
+}
+
+// Get unified check-in stats
+export async function getUnifiedCheckinStats() {
+  const db = await getDb();
+  if (!db) return { totalCheckins: 0, checkinsWithinRadius: 0, checkinsOutsideRadius: 0, checkinsToday: 0 };
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  // Auto check-ins stats
+  const autoStats = await db.select({
+    total: sql<number>`count(*)`,
+    withinRadius: sql<number>`sum(case when ${automaticCheckins.isWithinRadius} = true then 1 else 0 end)`,
+    outsideRadius: sql<number>`sum(case when ${automaticCheckins.isWithinRadius} = false then 1 else 0 end)`,
+    today: sql<number>`sum(case when ${automaticCheckins.createdAt} >= ${today} then 1 else 0 end)`,
+  }).from(automaticCheckins);
+  
+  // Manual check-ins stats
+  const manualStats = await db.select({
+    total: sql<number>`count(*)`,
+    withinRadius: sql<number>`sum(case when ${checkins.isWithinRadius} = true then 1 else 0 end)`,
+    outsideRadius: sql<number>`sum(case when ${checkins.isWithinRadius} = false then 1 else 0 end)`,
+    today: sql<number>`sum(case when ${checkins.createdAt} >= ${today} then 1 else 0 end)`,
+  }).from(checkins);
+  
+  return {
+    totalCheckins: (autoStats[0]?.total || 0) + (manualStats[0]?.total || 0),
+    checkinsWithinRadius: (autoStats[0]?.withinRadius || 0) + (manualStats[0]?.withinRadius || 0),
+    checkinsOutsideRadius: (autoStats[0]?.outsideRadius || 0) + (manualStats[0]?.outsideRadius || 0),
+    checkinsToday: (autoStats[0]?.today || 0) + (manualStats[0]?.today || 0),
+  };
 }

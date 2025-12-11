@@ -1,6 +1,6 @@
 import DashboardLayout from "@/components/DashboardLayout";
 import { trpc } from "@/lib/trpc";
-import { MapPin, CheckCircle, XCircle, Clock, User, Nfc } from "lucide-react";
+import { MapPin, CheckCircle, XCircle, Clock, User, Nfc, Zap, Hand } from "lucide-react";
 
 export default function Checkins() {
   const { data: checkins, isLoading } = trpc.checkins.list.useQuery({ limit: 100 });
@@ -28,7 +28,7 @@ export default function Checkins() {
           </div>
           <h1 className="text-4xl md:text-5xl">Check-ins</h1>
           <p className="text-gray-600 mt-2">
-            Registros de check-in por proximidade de tags NFC
+            Registros de check-in por proximidade de tags NFC (manuais e automáticos)
           </p>
         </div>
 
@@ -91,7 +91,7 @@ export default function Checkins() {
             <div className="space-y-0">
               {checkins.map((checkin, index) => (
                 <div
-                  key={checkin.id}
+                  key={`${checkin.type}-${checkin.id}`}
                   className={`border-4 border-black p-4 bg-white hover:bg-gray-50 transition-colors ${index > 0 ? '-mt-1' : ''}`}
                 >
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -108,12 +108,33 @@ export default function Checkins() {
                         <div className="flex items-center gap-2 mb-1">
                           <User className="w-4 h-4 text-gray-500" />
                           <span className="font-bold">
-                            {checkin.nfcUser?.name || "Usuário Anônimo"}
+                            {checkin.userName || "Usuário Anônimo"}
+                          </span>
+                          {/* Type badge */}
+                          <span className={`text-xs px-2 py-0.5 rounded ${
+                            checkin.type === 'automatic' 
+                              ? 'bg-blue-100 text-blue-700' 
+                              : 'bg-purple-100 text-purple-700'
+                          }`}>
+                            {checkin.type === 'automatic' ? (
+                              <span className="flex items-center gap-1">
+                                <Zap className="w-3 h-3" /> Auto
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1">
+                                <Hand className="w-3 h-3" /> Manual
+                              </span>
+                            )}
                           </span>
                         </div>
                         <div className="flex items-center gap-2 text-sm text-gray-600">
                           <Nfc className="w-3 h-3" />
-                          <span className="font-mono">{checkin.tag?.name || checkin.tag?.uid || "Tag desconhecida"}</span>
+                          <span className="font-mono">{checkin.tagName || checkin.tagUid || "Tag desconhecida"}</span>
+                          {checkin.scheduleName && (
+                            <span className="text-xs text-gray-500">
+                              • {checkin.scheduleName}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -131,6 +152,11 @@ export default function Checkins() {
                       <span className="text-sm text-gray-500">
                         {formatDate(checkin.createdAt)}
                       </span>
+                      {checkin.scheduleStartTime && checkin.scheduleEndTime && (
+                        <span className="text-xs text-gray-400">
+                          Período: {checkin.scheduleStartTime} - {checkin.scheduleEndTime}
+                        </span>
+                      )}
                     </div>
                   </div>
                   

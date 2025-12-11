@@ -16,8 +16,18 @@ import {
   createCheckinSchedule, getCheckinScheduleById, getCheckinSchedulesByTagId, getAllCheckinSchedules, getActiveSchedulesForDay, updateCheckinSchedule, deleteCheckinSchedule,
   createAutomaticCheckin, getAllAutomaticCheckins, getAutomaticCheckinsByScheduleId, updateAutomaticCheckinStatus, hasUserCheckinForScheduleToday,
   createUserLocationUpdate, getLatestUserLocation, getUsersWithRecentLocation, getUsersByTagIdWithRecentLocation,
-  getScheduleTagRelations, addScheduleTagRelation, removeScheduleTagRelation, setScheduleTagRelations, getAllCheckinSchedulesWithTags, getActiveSchedulesForDayWithTags
+  getScheduleTagRelations, addScheduleTagRelation, removeScheduleTagRelation, setScheduleTagRelations, getAllCheckinSchedulesWithTags, getActiveSchedulesForDayWithTags,
+  getAllUnifiedCheckins, hasUserCheckinForTagToday, getActiveScheduleForTag, getUnifiedCheckinStats
 } from "./db";
+
+// Helper function to get current date/time in Campo Grande MS timezone (UTC-4)
+function getCampoGrandeTime(): Date {
+  // Campo Grande MS is UTC-4 (America/Campo_Grande)
+  const now = new Date();
+  const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
+  const campoGrandeOffset = -4 * 60 * 60000; // UTC-4 in milliseconds
+  return new Date(utcTime + campoGrandeOffset);
+}
 
 // Helper function to calculate distance between two coordinates (Haversine formula)
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -505,11 +515,11 @@ export const appRouter = router({
         };
       }),
 
-    // Admin: list all check-ins
+    // Admin: list all check-ins (unified manual + automatic)
     list: adminProcedure
       .input(z.object({ limit: z.number().optional() }).optional())
       .query(async ({ input }) => {
-        return getAllCheckins(input?.limit || 100);
+        return getAllUnifiedCheckins(input?.limit || 100);
       }),
 
     // Admin: check-ins by tag
@@ -526,10 +536,111 @@ export const appRouter = router({
         return getCheckinsByUserId(input.nfcUserId, input.limit || 100);
       }),
 
-    // Admin: check-in stats
+    // Admin: check-in stats (unified manual + automatic)
     stats: adminProcedure.query(async () => {
-      return getCheckinStats();
+      return getUnifiedCheckinStats();
     }),
+
+    // Public: check if there's an active schedule for manual check-in
+    getActiveSchedule: publicProcedure
+      .input(z.object({ tagId: z.number() }))
+      .query(async ({ input }) => {
+        const now = getCampoGrandeTime();
+        const currentDay = now.getDay();
+        const currentMinutes = now.getHours() * 60 + now.getMinutes();
+        
+        const schedule = await getActiveScheduleForTag(input.tagId, currentDay, currentMinutes);
+        
+        return {
+          hasActiveSchedule: !!schedule,
+          schedule: schedule ? {
+            id: schedule.id,
+            name: schedule.name,
+            startTime: schedule.startTime,
+            endTime: schedule.endTime,
+          } : null,
+          currentTime: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
+          currentDay,
+        };
+      }),
+
+    // Public: manual check-in via NFC tag page
+    manualCheckin: publicProcedure
+      .input(z.object({
+        tagId: z.number(),
+        nfcUserId: z.number(),
+        latitude: z.string(),
+        longitude: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        const now = getCampoGrandeTime();
+        const currentDay = now.getDay();
+        const currentMinutes = now.getHours() * 60 + now.getMinutes();
+        
+        // Check if there's an active schedule for this tag
+        const schedule = await getActiveScheduleForTag(input.tagId, currentDay, currentMinutes);
+        
+        if (!schedule) {
+          throw new TRPCError({ 
+            code: 'BAD_REQUEST', 
+            message: 'Não há agendamento ativo para esta tag no momento.' 
+          });
+        }
+        
+        // Check if user already has check-in today for this tag
+        const alreadyCheckedIn = await hasUserCheckinForTagToday(input.tagId, input.nfcUserId, now);
+        if (alreadyCheckedIn) {
+          throw new TRPCError({ 
+            code: 'BAD_REQUEST', 
+            message: 'Você já fez check-in hoje para esta tag.' 
+          });
+        }
+        
+        // Get tag for distance calculation
+        const tag = await getNfcTagById(input.tagId);
+        if (!tag) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Tag não encontrada' });
+        }
+        
+        // Calculate distance
+        let distanceMeters: number | null = null;
+        let isWithinRadius = false;
+        
+        if (tag.latitude && tag.longitude) {
+          const tagLat = parseFloat(tag.latitude);
+          const tagLon = parseFloat(tag.longitude);
+          const userLat = parseFloat(input.latitude);
+          const userLon = parseFloat(input.longitude);
+          
+          distanceMeters = Math.round(calculateDistance(tagLat, tagLon, userLat, userLon));
+          isWithinRadius = distanceMeters <= (tag.radiusMeters || 100);
+        }
+        
+        // Create automatic check-in record (same table as automatic check-ins for unified view)
+        const result = await createAutomaticCheckin({
+          scheduleId: schedule.id,
+          tagId: input.tagId,
+          nfcUserId: input.nfcUserId,
+          userLatitude: input.latitude,
+          userLongitude: input.longitude,
+          distanceMeters,
+          isWithinRadius,
+          scheduledDate: now,
+          periodStart: schedule.startTime,
+          periodEnd: schedule.endTime,
+          checkinTime: now,
+          status: 'completed',
+        });
+        
+        return {
+          success: true,
+          checkinId: result.id,
+          distanceMeters,
+          isWithinRadius,
+          radiusMeters: tag.radiusMeters || 100,
+          scheduleName: schedule.name,
+        };
+      }),
   }),
 
   // ============ CHECK-IN SCHEDULE ROUTES ============
@@ -669,8 +780,8 @@ export const appRouter = router({
         const schedule = await getCheckinScheduleById(input.scheduleId);
         if (!schedule) throw new TRPCError({ code: 'NOT_FOUND', message: 'Agendamento não encontrado' });
 
-        // Validate current time is within schedule period
-        const now = new Date();
+        // Validate current time is within schedule period (using Campo Grande MS timezone)
+        const now = getCampoGrandeTime();
         const currentMinutes = now.getHours() * 60 + now.getMinutes();
         
         const [startH, startM] = schedule.startTime.split(':').map(Number);
@@ -682,11 +793,11 @@ export const appRouter = router({
           const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
           throw new TRPCError({ 
             code: 'BAD_REQUEST', 
-            message: `Horário atual (${currentTime}) está fora do período configurado (${schedule.startTime} - ${schedule.endTime}). Check-in não permitido.` 
+            message: `Horário atual em Campo Grande (${currentTime}) está fora do período configurado (${schedule.startTime} - ${schedule.endTime}). Check-in não permitido.` 
           });
         }
 
-        // Validate current day is in schedule days
+        // Validate current day is in schedule days (using Campo Grande MS timezone)
         const currentDay = now.getDay();
         const scheduleDays = schedule.daysOfWeek.split(',').map(d => parseInt(d.trim()));
         if (!scheduleDays.includes(currentDay)) {

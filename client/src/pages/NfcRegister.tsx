@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
-import { Nfc, CheckCircle, ArrowRight, Loader2, AlertCircle, MapPin, Smartphone, Download } from "lucide-react";
+import { Nfc, CheckCircle, ArrowRight, Loader2, AlertCircle, MapPin, Smartphone, Download, Clock, Hand } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useSearch } from "wouter";
 import { toast } from "sonner";
@@ -48,6 +48,7 @@ export default function NfcRegister() {
   const [location, setLocation] = useState<GeoLocation | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const [checkinDone, setCheckinDone] = useState(false);
   
   // Get unique device ID
   const deviceId = getDeviceId();
@@ -56,6 +57,12 @@ export default function NfcRegister() {
   const { data: checkData, isLoading: isChecking, error: checkError } = trpc.nfcUsers.checkByTagUid.useQuery(
     { tagUid, deviceId },
     { enabled: !!tagUid && !!deviceId }
+  );
+
+  // Check if there's an active schedule for this tag
+  const { data: scheduleData } = trpc.checkins.getActiveSchedule.useQuery(
+    { tagId: checkData?.tag?.id || 0 },
+    { enabled: !!checkData?.tag?.id }
   );
 
   const registerMutation = trpc.nfcUsers.register.useMutation({
@@ -69,6 +76,20 @@ export default function NfcRegister() {
       }
       if (data.redirectUrl) {
         setRedirectUrl(data.redirectUrl);
+      }
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
+
+  const manualCheckinMutation = trpc.checkins.manualCheckin.useMutation({
+    onSuccess: (result) => {
+      setCheckinDone(true);
+      if (result.isWithinRadius) {
+        toast.success(`Check-in realizado! Você está a ${result.distanceMeters}m (dentro do raio)`);
+      } else {
+        toast.warning(`Check-in registrado, mas você está a ${result.distanceMeters}m (fora do raio de ${result.radiusMeters}m)`);
       }
     },
     onError: (error) => {
@@ -128,15 +149,34 @@ export default function NfcRegister() {
   // Auto-redirect if user already exists
   useEffect(() => {
     if (checkData?.exists && checkData.redirectUrl) {
-      setIsRedirecting(true);
-      const timer = setTimeout(() => {
-        window.location.href = checkData.redirectUrl!;
-      }, 1500);
-      return () => clearTimeout(timer);
+      // Don't auto-redirect if there's an active schedule - let user do check-in first
+      if (!scheduleData?.hasActiveSchedule) {
+        setIsRedirecting(true);
+        const timer = setTimeout(() => {
+          window.location.href = checkData.redirectUrl!;
+        }, 1500);
+        return () => clearTimeout(timer);
+      }
     }
-  }, [checkData]);
+  }, [checkData, scheduleData]);
 
-  // Removed auto-redirect - user should activate location first
+  const handleManualCheckin = () => {
+    if (!checkData?.tag?.id || !checkData?.user?.id) {
+      toast.error("Dados não encontrados");
+      return;
+    }
+    if (!location) {
+      toast.error("Localização é obrigatória para check-in!");
+      requestLocation();
+      return;
+    }
+    manualCheckinMutation.mutate({
+      tagId: checkData.tag.id,
+      nfcUserId: checkData.user.id,
+      latitude: location.latitude,
+      longitude: location.longitude,
+    });
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -176,6 +216,8 @@ export default function NfcRegister() {
   const handleRedirect = () => {
     if (redirectUrl) {
       window.location.href = redirectUrl;
+    } else if (checkData?.redirectUrl) {
+      window.location.href = checkData.redirectUrl;
     }
   };
 
@@ -229,33 +271,173 @@ export default function NfcRegister() {
     );
   }
 
-  // User exists - redirecting automatically
-  if (checkData?.exists && isRedirecting) {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center p-4">
-        <div className="text-center">
-          <div className="w-20 h-20 bg-green-600 flex items-center justify-center mx-auto mb-6">
-            <CheckCircle className="w-12 h-12 text-white" />
-          </div>
-          <h2 className="mb-2">Bem-vindo de volta!</h2>
-          <p className="text-gray-500 mb-4">
-            {checkData.user?.name ? `Olá, ${checkData.user.name}!` : "Conexão registrada."}
-          </p>
-          {checkData.redirectUrl ? (
-            <>
-              <p className="text-sm text-gray-400 mb-4">Redirecionando...</p>
-              <Loader2 className="w-6 h-6 animate-spin mx-auto text-gray-400" />
-            </>
-          ) : (
-            <p className="text-sm text-gray-500">Você pode fechar esta página.</p>
-          )}
-        </div>
-      </div>
-    );
-  }
+  // User exists - show check-in option if schedule is active
+  if (checkData?.exists) {
+    // If there's an active schedule, show check-in option
+    if (scheduleData?.hasActiveSchedule && !checkinDone) {
+      return (
+        <div className="min-h-screen bg-white flex items-center justify-center p-4">
+          <div className="border-4 border-black p-8 md:p-12 brutal-shadow max-w-md w-full">
+            <div className="text-center mb-6">
+              <div className="w-20 h-20 bg-green-600 flex items-center justify-center mx-auto mb-6">
+                <CheckCircle className="w-12 h-12 text-white" />
+              </div>
+              <h2 className="mb-2">Bem-vindo de volta!</h2>
+              <p className="text-gray-500">
+                {checkData.user?.name ? `Olá, ${checkData.user.name}!` : "Conexão registrada."}
+              </p>
+            </div>
 
-  // User exists but no redirect URL
-  if (checkData?.exists && !checkData.redirectUrl) {
+            {/* Active Schedule - Check-in Option */}
+            <div className="bg-blue-50 border-4 border-blue-600 p-4 mb-6">
+              <div className="flex items-center gap-3 mb-3">
+                <Clock className="w-6 h-6 text-blue-600" />
+                <div>
+                  <h4 className="font-bold text-blue-800">AGENDAMENTO ATIVO</h4>
+                  <p className="text-sm text-gray-600">
+                    {scheduleData.schedule?.name || "Check-in disponível"}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Período: {scheduleData.schedule?.startTime} - {scheduleData.schedule?.endTime}
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    Horário atual: {scheduleData.currentTime}
+                  </p>
+                </div>
+              </div>
+
+              {/* Location Status */}
+              <div className="mb-4 p-3 bg-white border-2 border-gray-200">
+                <div className="flex items-center gap-3">
+                  <MapPin className="w-5 h-5 text-gray-600" />
+                  <div className="flex-1">
+                    {isGettingLocation ? (
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span className="text-sm text-gray-600">Obtendo localização...</span>
+                      </div>
+                    ) : location ? (
+                      <div>
+                        <span className="text-sm text-green-600 font-medium">Localização capturada</span>
+                        <p className="text-xs text-gray-500">
+                          Precisão: ~{Math.round(location.accuracy)}m
+                        </p>
+                      </div>
+                    ) : locationError ? (
+                      <div>
+                        <span className="text-sm text-red-600">{locationError}</span>
+                        <button 
+                          onClick={requestLocation}
+                          className="text-xs text-blue-600 underline ml-2"
+                        >
+                          Tentar novamente
+                        </button>
+                      </div>
+                    ) : (
+                      <button 
+                        onClick={requestLocation}
+                        className="text-sm text-blue-600 underline"
+                      >
+                        Permitir localização
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <Button 
+                onClick={handleManualCheckin}
+                disabled={manualCheckinMutation.isPending || !location}
+                className="w-full bg-blue-600 hover:bg-blue-700 font-bold text-lg py-6 h-auto"
+              >
+                {manualCheckinMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 w-5 h-5 animate-spin" /> Registrando...
+                  </>
+                ) : (
+                  <>
+                    <Hand className="mr-2 w-5 h-5" /> FAZER CHECK-IN
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {checkData.redirectUrl && (
+              <Button 
+                variant="outline"
+                onClick={handleRedirect}
+                className="w-full border-2 border-black hover:bg-gray-100 font-bold"
+              >
+                Pular e continuar <ArrowRight className="ml-2 w-5 h-5" />
+              </Button>
+            )}
+
+            {!checkData.redirectUrl && (
+              <p className="text-sm text-gray-500 text-center">
+                Ou você pode fechar esta página.
+              </p>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // Check-in completed
+    if (checkinDone) {
+      return (
+        <div className="min-h-screen bg-white flex items-center justify-center p-4">
+          <div className="border-4 border-black p-8 md:p-12 brutal-shadow max-w-md w-full text-center">
+            <div className="w-20 h-20 bg-green-600 flex items-center justify-center mx-auto mb-6">
+              <CheckCircle className="w-12 h-12 text-white" />
+            </div>
+            <h2 className="mb-4">Check-in Realizado!</h2>
+            <p className="text-gray-600 mb-6">
+              Sua presença foi registrada com sucesso.
+            </p>
+            
+            {checkData.redirectUrl ? (
+              <Button 
+                onClick={handleRedirect}
+                className="w-full brutal-shadow-sm hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all font-bold uppercase text-lg py-6 h-auto"
+              >
+                Continuar <ArrowRight className="ml-2 w-5 h-5" />
+              </Button>
+            ) : (
+              <p className="text-sm text-gray-500">
+                Você pode fechar esta página.
+              </p>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // User exists, redirecting (no active schedule)
+    if (isRedirecting) {
+      return (
+        <div className="min-h-screen bg-white flex items-center justify-center p-4">
+          <div className="text-center">
+            <div className="w-20 h-20 bg-green-600 flex items-center justify-center mx-auto mb-6">
+              <CheckCircle className="w-12 h-12 text-white" />
+            </div>
+            <h2 className="mb-2">Bem-vindo de volta!</h2>
+            <p className="text-gray-500 mb-4">
+              {checkData.user?.name ? `Olá, ${checkData.user.name}!` : "Conexão registrada."}
+            </p>
+            {checkData.redirectUrl ? (
+              <>
+                <p className="text-sm text-gray-400 mb-4">Redirecionando...</p>
+                <Loader2 className="w-6 h-6 animate-spin mx-auto text-gray-400" />
+              </>
+            ) : (
+              <p className="text-sm text-gray-500">Você pode fechar esta página.</p>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // User exists but no redirect URL and no active schedule
     return (
       <div className="min-h-screen bg-white flex items-center justify-center p-4">
         <div className="border-4 border-black p-8 md:p-12 brutal-shadow max-w-md w-full text-center">
