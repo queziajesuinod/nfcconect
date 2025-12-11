@@ -188,19 +188,34 @@ export default function Users() {
                   
                   <div className="flex items-center gap-2 shrink-0 flex-wrap">
                     {user.deviceId && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          navigator.clipboard.writeText(user.deviceId || '');
-                          toast.success("Device ID copiado!");
-                        }}
-                        className="border-2 border-blue-600 text-blue-600 rounded-none font-bold uppercase hover:bg-blue-600 hover:text-white"
-                        title="Copiar Device ID"
-                      >
-                        <Smartphone className="w-4 h-4 mr-1" />
-                        <Copy className="w-3 h-3" />
-                      </Button>
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const appUrl = `${window.location.origin}/app?device=${user.deviceId}`;
+                            navigator.clipboard.writeText(appUrl);
+                            toast.success("Link do App copiado!");
+                          }}
+                          className="border-2 border-green-600 text-green-600 rounded-none font-bold uppercase hover:bg-green-600 hover:text-white"
+                          title="Copiar link do App para ativar localização"
+                        >
+                          <Smartphone className="w-4 h-4 mr-1" />
+                          Link App
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const appUrl = `${window.location.origin}/app?device=${user.deviceId}`;
+                            window.open(appUrl, '_blank');
+                          }}
+                          className="border-2 border-blue-600 text-blue-600 rounded-none font-bold uppercase hover:bg-blue-600 hover:text-white"
+                          title="Abrir App em nova aba"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </Button>
+                      </>
                     )}
                     {!user.isValidated && (
                       <Button

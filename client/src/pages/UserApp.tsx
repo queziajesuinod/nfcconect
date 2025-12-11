@@ -47,8 +47,18 @@ export default function UserApp() {
   const searchString = useSearch();
   const params = new URLSearchParams(searchString);
   const tagUid = params.get("uid");
+  const deviceIdParam = params.get("device"); // deviceId from URL for existing users
   const redirectUrl = params.get("redirect"); // URL to redirect after activation
-  const [deviceId] = useState(() => getDeviceId());
+  
+  // Use deviceId from URL if provided (for existing users), otherwise generate/get from localStorage
+  const [deviceId] = useState(() => {
+    if (deviceIdParam) {
+      // Save the deviceId from URL to localStorage for future use
+      localStorage.setItem('nfc_device_id', deviceIdParam);
+      return deviceIdParam;
+    }
+    return getDeviceId();
+  });
 
   const [isInstalled, setIsInstalled] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
