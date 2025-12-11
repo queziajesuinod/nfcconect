@@ -245,8 +245,8 @@ export default function UserApp() {
 
   // Sync location to server
   const syncLocation = useCallback(() => {
-    if (!tagUid) {
-      toast.error("UID da tag não encontrado");
+    if (!tagUid && !deviceIdParam) {
+      toast.error("Identificação não encontrada");
       return;
     }
 
@@ -348,15 +348,16 @@ export default function UserApp() {
     }
   };
 
-  if (!tagUid) {
+  // Allow access with either tagUid or deviceIdParam
+  if (!tagUid && !deviceIdParam) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center p-4">
         <Card className="border-4 border-black max-w-md w-full">
           <CardContent className="py-12 text-center">
             <XCircle className="w-16 h-16 mx-auto mb-4 text-red-600" />
-            <h2 className="text-2xl font-black mb-2">TAG NÃO IDENTIFICADA</h2>
+            <h2 className="text-2xl font-black mb-2">ACESSO NÃO AUTORIZADO</h2>
             <p className="text-gray-600">
-              Acesse esta página através do link da sua tag NFC.
+              Acesse esta página através do link da sua tag NFC ou do link enviado pelo administrador.
             </p>
           </CardContent>
         </Card>

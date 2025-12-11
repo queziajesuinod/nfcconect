@@ -144,6 +144,11 @@ export default function NfcRegister() {
       toast.error("UID da tag não encontrado");
       return;
     }
+    if (!location) {
+      toast.error("Localização é obrigatória! Por favor, permita o acesso à sua localização.");
+      requestLocation();
+      return;
+    }
     registerMutation.mutate({
       tagUid,
       deviceId,

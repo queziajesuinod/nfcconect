@@ -109,3 +109,5 @@
 - [x] Atualizar página UserApp para aceitar deviceId como parâmetro
 - [x] Atualizar listagem de usuários para gerar link com deviceId
 - [x] Permitir enviar link personalizado para usuários já cadastrados
+- [x] Corrigir página UserApp para funcionar apenas com deviceId (sem precisar de uid da tag)
+- [x] Forçar geolocalização obrigatória no cadastro novo
