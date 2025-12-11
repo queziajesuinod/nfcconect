@@ -13,7 +13,7 @@ import {
   createCheckin, getCheckinsByTagId, getCheckinsByUserId, getAllCheckins, getCheckinStats,
   getStats,
   createCheckinSchedule, getCheckinScheduleById, getCheckinSchedulesByTagId, getAllCheckinSchedules, getActiveSchedulesForDay, updateCheckinSchedule, deleteCheckinSchedule,
-  createAutomaticCheckin, getAllAutomaticCheckins, getAutomaticCheckinsByScheduleId, updateAutomaticCheckinStatus,
+  createAutomaticCheckin, getAllAutomaticCheckins, getAutomaticCheckinsByScheduleId, updateAutomaticCheckinStatus, hasUserCheckinForScheduleToday,
   createUserLocationUpdate, getLatestUserLocation, getUsersWithRecentLocation, getUsersByTagIdWithRecentLocation
 } from "./db";
 
@@ -584,9 +584,22 @@ export const appRouter = router({
         const usersWithLocation = await getUsersByTagIdWithRecentLocation(schedule.tagId, 60);
 
         const results = [];
+        const skipped = [];
         const now = new Date();
 
         for (const { user, location } of usersWithLocation) {
+          // Check if user already has a check-in for this schedule today
+          const alreadyCheckedIn = await hasUserCheckinForScheduleToday(schedule.id, user.id, now);
+          
+          if (alreadyCheckedIn) {
+            skipped.push({
+              userId: user.id,
+              userName: user.name,
+              reason: 'Já fez check-in neste período hoje',
+            });
+            continue;
+          }
+
           const userLat = parseFloat(location.latitude);
           const userLon = parseFloat(location.longitude);
           const tagLat = parseFloat(tag.latitude);
@@ -625,8 +638,10 @@ export const appRouter = router({
           success: true,
           scheduleName: schedule.name,
           usersProcessed: results.length,
+          usersSkipped: skipped.length,
           usersWithinRadius: results.filter(r => r.isWithinRadius).length,
           results,
+          skipped,
         };
       }),
   }),

@@ -1,4 +1,4 @@
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, sql, and, gte, lte } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { 
   InsertUser, users, 
@@ -681,4 +681,30 @@ export async function getUsersByTagIdWithRecentLocation(tagId: number, minutesAg
   }
   
   return usersWithLocation;
+}
+
+// Check if user already has a check-in for a schedule on a specific date
+export async function hasUserCheckinForScheduleToday(scheduleId: number, nfcUserId: number, date: Date) {
+  const db = await getDb();
+  if (!db) return false;
+  
+  // Get start and end of the day
+  const startOfDay = new Date(date);
+  startOfDay.setHours(0, 0, 0, 0);
+  
+  const endOfDay = new Date(date);
+  endOfDay.setHours(23, 59, 59, 999);
+  
+  const result = await db.select({ count: sql<number>`count(*)` })
+    .from(automaticCheckins)
+    .where(
+      and(
+        eq(automaticCheckins.scheduleId, scheduleId),
+        eq(automaticCheckins.nfcUserId, nfcUserId),
+        gte(automaticCheckins.scheduledDate, startOfDay),
+        lte(automaticCheckins.scheduledDate, endOfDay)
+      )
+    );
+  
+  return (result[0]?.count || 0) > 0;
 }

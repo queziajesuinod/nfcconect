@@ -72,3 +72,7 @@
 ## Melhorias de Acesso ao PWA
 - [x] Botão "Instalar App" na listagem de usuários com link copiável
 - [x] Redirecionar automaticamente após primeiro cadastro para o PWA
+
+## Bugs
+- [x] Corrigir página de Check-ins que não está funcionando
+- [x] Evitar check-ins duplicados no mesmo período de agendamento
