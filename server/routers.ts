@@ -7,7 +7,8 @@ import { nanoid } from "nanoid";
 import { TRPCError } from "@trpc/server";
 import {
   createNfcTag, getNfcTagByUid, getNfcTagById, getAllNfcTags, updateNfcTag, deleteNfcTag,
-  createNfcUser, getNfcUserByTagId, getNfcUserByTagIdAndDeviceId, getNfcUserById, getAllNfcUsers, updateNfcUser, validateNfcUser, deleteNfcUser,
+  createNfcUser, getNfcUserByDeviceId, getNfcUserById, getAllNfcUsers, updateNfcUser, validateNfcUser, deleteNfcUser,
+  getUserTagRelation, createUserTagRelation, updateUserTagRelation, getAllNfcUsersByTagId, getTagsByUserId,
   createConnectionLog, getConnectionLogs, getConnectionLogsByTagId, getConnectionLogsByUserId,
   createDynamicLink, getDynamicLinkByShortCode, getDynamicLinksByUserId, getAllDynamicLinks, updateDynamicLink, incrementLinkClickCount, deleteDynamicLink,
   createCheckin, getCheckinsByTagId, getCheckinsByUserId, getAllCheckins, getCheckinStats,
@@ -134,7 +135,15 @@ export const appRouter = router({
     getByTagId: publicProcedure
       .input(z.object({ tagId: z.number() }))
       .query(async ({ input }) => {
-        return getNfcUserByTagId(input.tagId);
+        // Return all users connected to this tag
+        return getAllNfcUsersByTagId(input.tagId);
+      }),
+
+    // Get all tags connected to a user
+    getTagsByUserId: publicProcedure
+      .input(z.object({ userId: z.number() }))
+      .query(async ({ input }) => {
+        return getTagsByUserId(input.userId);
       }),
 
     // Check if user exists for a tag UID and device (public - for auto-redirect)
@@ -150,24 +159,29 @@ export const appRouter = router({
           throw new TRPCError({ code: 'FORBIDDEN', message: 'Esta tag está bloqueada' });
         }
         
-        // Check by tag AND device - allows multiple users per tag
-        const existingUser = await getNfcUserByTagIdAndDeviceId(tag.id, input.deviceId);
+        // Check if user exists by deviceId
+        const existingUser = await getNfcUserByDeviceId(input.deviceId);
         if (existingUser) {
-          // Update last connection and log
-          await updateNfcUser(existingUser.id, { lastConnectionAt: new Date() });
-          await createConnectionLog({
-            tagId: tag.id,
-            nfcUserId: existingUser.id,
-            action: 'redirect',
-            ipAddress: ctx.req.ip || ctx.req.headers['x-forwarded-for'] as string || null,
-            userAgent: ctx.req.headers['user-agent'] || null,
-          });
-          return { 
-            exists: true, 
-            tag, 
-            user: existingUser, 
-            redirectUrl: tag.redirectUrl 
-          };
+          // Check if user is connected to this tag
+          const relation = await getUserTagRelation(existingUser.id, tag.id);
+          if (relation) {
+            // Update last connection and log
+            await updateNfcUser(existingUser.id, { lastConnectionAt: new Date() });
+            await updateUserTagRelation(existingUser.id, tag.id);
+            await createConnectionLog({
+              tagId: tag.id,
+              nfcUserId: existingUser.id,
+              action: 'redirect',
+              ipAddress: ctx.req.ip || ctx.req.headers['x-forwarded-for'] as string || null,
+              userAgent: ctx.req.headers['user-agent'] || null,
+            });
+            return { 
+              exists: true, 
+              tag, 
+              user: existingUser, 
+              redirectUrl: tag.redirectUrl 
+            };
+          }
         }
         
         return { exists: false, tag, user: null, redirectUrl: null };
@@ -200,33 +214,60 @@ export const appRouter = router({
           throw new TRPCError({ code: 'FORBIDDEN', message: 'Esta tag está bloqueada' });
         }
 
-        // Check if user already exists for this tag AND device
-        const existingUser = await getNfcUserByTagIdAndDeviceId(tag.id, input.deviceId);
+        const ipAddress = ctx.req.ip || ctx.req.headers['x-forwarded-for'] as string || null;
+        const userAgent = input.userAgent || ctx.req.headers['user-agent'] || null;
+
+        // Check if user already exists by deviceId
+        let existingUser = await getNfcUserByDeviceId(input.deviceId);
+        
         if (existingUser) {
-          // Update last connection and log
-          await updateNfcUser(existingUser.id, { lastConnectionAt: new Date() });
-          await createConnectionLog({
-            tagId: tag.id,
-            nfcUserId: existingUser.id,
-            action: 'validation',
-            ipAddress: ctx.req.ip || ctx.req.headers['x-forwarded-for'] as string || null,
-            userAgent: input.userAgent || ctx.req.headers['user-agent'] || null,
-            latitude: input.latitude || null,
-            longitude: input.longitude || null,
-          });
-          return { 
-            isNewUser: false, 
-            user: existingUser,
-            redirectUrl: tag.redirectUrl 
-          };
+          // User exists, check if already connected to this tag
+          const existingRelation = await getUserTagRelation(existingUser.id, tag.id);
+          
+          if (existingRelation) {
+            // Already connected to this tag, just update last connection
+            await updateNfcUser(existingUser.id, { lastConnectionAt: new Date() });
+            await updateUserTagRelation(existingUser.id, tag.id);
+            await createConnectionLog({
+              tagId: tag.id,
+              nfcUserId: existingUser.id,
+              action: 'validation',
+              ipAddress,
+              userAgent,
+              latitude: input.latitude || null,
+              longitude: input.longitude || null,
+            });
+            return { 
+              isNewUser: false, 
+              user: existingUser,
+              redirectUrl: tag.redirectUrl 
+            };
+          } else {
+            // User exists but not connected to this tag - create new relation
+            await createUserTagRelation({
+              userId: existingUser.id,
+              tagId: tag.id,
+            });
+            await updateNfcUser(existingUser.id, { lastConnectionAt: new Date() });
+            await createConnectionLog({
+              tagId: tag.id,
+              nfcUserId: existingUser.id,
+              action: 'first_read',
+              ipAddress,
+              userAgent,
+              latitude: input.latitude || null,
+              longitude: input.longitude || null,
+            });
+            return { 
+              isNewUser: false, // User already has data, just connected to new tag
+              user: existingUser,
+              redirectUrl: tag.redirectUrl 
+            };
+          }
         }
 
         // Create new NFC user with geolocation and device ID
-        const ipAddress = ctx.req.ip || ctx.req.headers['x-forwarded-for'] as string || null;
-        const userAgent = input.userAgent || ctx.req.headers['user-agent'] || null;
-        
         const result = await createNfcUser({
-          tagId: tag.id,
           deviceId: input.deviceId,
           name: input.name || null,
           email: input.email || null,
@@ -236,6 +277,12 @@ export const appRouter = router({
           userAgent,
           registrationLatitude: input.latitude || null,
           registrationLongitude: input.longitude || null,
+        });
+
+        // Create user-tag relationship
+        await createUserTagRelation({
+          userId: result.id,
+          tagId: tag.id,
         });
 
         // Log first connection with location
@@ -375,6 +422,7 @@ export const appRouter = router({
     create: publicProcedure
       .input(z.object({
         tagUid: z.string().min(1),
+        deviceId: z.string().min(1),
         latitude: z.string(),
         longitude: z.string(),
         deviceInfo: z.string().optional(),
@@ -394,10 +442,16 @@ export const appRouter = router({
           throw new TRPCError({ code: 'FORBIDDEN', message: 'Check-in não habilitado para esta tag' });
         }
 
-        // Find user for this tag
-        const nfcUser = await getNfcUserByTagId(tag.id);
+        // Find user by deviceId
+        const nfcUser = await getNfcUserByDeviceId(input.deviceId);
         if (!nfcUser) {
           throw new TRPCError({ code: 'NOT_FOUND', message: 'Usuário não encontrado. Registre-se primeiro.' });
+        }
+
+        // Check if user is connected to this tag
+        const relation = await getUserTagRelation(nfcUser.id, tag.id);
+        if (!relation) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Usuário não conectado a esta tag.' });
         }
 
         // Calculate distance if tag has location
@@ -671,18 +725,15 @@ export const appRouter = router({
     // Public: update user location (for automatic check-in)
     update: publicProcedure
       .input(z.object({
-        tagUid: z.string(),
+        deviceId: z.string().min(1),
         latitude: z.string(),
         longitude: z.string(),
         accuracy: z.number().optional(),
         deviceInfo: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
-        // Find tag and user
-        const tag = await getNfcTagByUid(input.tagUid);
-        if (!tag) throw new TRPCError({ code: 'NOT_FOUND', message: 'Tag não encontrada' });
-
-        const user = await getNfcUserByTagId(tag.id);
+        // Find user by deviceId
+        const user = await getNfcUserByDeviceId(input.deviceId);
         if (!user) throw new TRPCError({ code: 'NOT_FOUND', message: 'Usuário não encontrado. Registre-se primeiro.' });
 
         // Save location update

@@ -32,10 +32,22 @@ interface SyncState {
   error: string | null;
 }
 
+// Generate or retrieve device ID from localStorage
+function getDeviceId(): string {
+  const DEVICE_ID_KEY = 'nfc_device_id';
+  let deviceId = localStorage.getItem(DEVICE_ID_KEY);
+  if (!deviceId) {
+    deviceId = crypto.randomUUID();
+    localStorage.setItem(DEVICE_ID_KEY, deviceId);
+  }
+  return deviceId;
+}
+
 export default function UserApp() {
   const searchString = useSearch();
   const params = new URLSearchParams(searchString);
   const tagUid = params.get("uid");
+  const [deviceId] = useState(() => getDeviceId());
 
   const [isInstalled, setIsInstalled] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
@@ -235,7 +247,7 @@ export default function UserApp() {
     setSyncState(prev => ({ ...prev, syncing: true }));
 
     updateLocationMutation.mutate({
-      tagUid,
+      deviceId,
       latitude: location.latitude.toString(),
       longitude: location.longitude.toString(),
       accuracy: location.accuracy || undefined,

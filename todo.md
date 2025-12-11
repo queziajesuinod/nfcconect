@@ -93,3 +93,10 @@
 - [x] Atualizar lógica de verificação para identificar por tag + dispositivo
 - [x] Atualizar lógica de registro para incluir deviceId
 - [x] Permitir múltiplos usuários registrados na mesma tag
+
+## Usuário com Múltiplas Tags
+- [x] Criar tabela de relacionamento usuário-tags (muitos-para-muitos)
+- [x] Identificar usuário pelo deviceId independente da tag
+- [x] Vincular usuário existente a novas tags automaticamente
+- [x] Atualizar listagem de usuários para mostrar tags vinculadas
+- [x] Evitar cadastros duplicados do mesmo dispositivo

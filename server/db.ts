@@ -4,6 +4,7 @@ import {
   InsertUser, users, 
   nfcTags, InsertNfcTag, NfcTag,
   nfcUsers, InsertNfcUser, NfcUser,
+  userTagRelations, InsertUserTagRelation,
   connectionLogs, InsertConnectionLog,
   dynamicLinks, InsertDynamicLink,
   checkins, InsertCheckin,
@@ -156,29 +157,81 @@ export async function createNfcUser(user: InsertNfcUser) {
   return { id: result[0].insertId };
 }
 
-export async function getNfcUserByTagId(tagId: number) {
+// Get user by deviceId (unique identifier)
+export async function getNfcUserByDeviceId(deviceId: string) {
   const db = await getDb();
   if (!db) return undefined;
   
-  const result = await db.select().from(nfcUsers).where(eq(nfcUsers.tagId, tagId)).limit(1);
+  const result = await db.select().from(nfcUsers).where(eq(nfcUsers.deviceId, deviceId)).limit(1);
   return result[0];
 }
 
-export async function getNfcUserByTagIdAndDeviceId(tagId: number, deviceId: string) {
+// Check if user is connected to a specific tag
+export async function getUserTagRelation(userId: number, tagId: number) {
   const db = await getDb();
   if (!db) return undefined;
   
-  const result = await db.select().from(nfcUsers)
-    .where(and(eq(nfcUsers.tagId, tagId), eq(nfcUsers.deviceId, deviceId)))
+  const result = await db.select().from(userTagRelations)
+    .where(and(eq(userTagRelations.userId, userId), eq(userTagRelations.tagId, tagId)))
     .limit(1);
   return result[0];
 }
 
+// Create user-tag relationship
+export async function createUserTagRelation(data: InsertUserTagRelation) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(userTagRelations).values(data);
+  return { id: result[0].insertId };
+}
+
+// Update user-tag relationship (last connection)
+export async function updateUserTagRelation(userId: number, tagId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.update(userTagRelations)
+    .set({ lastConnectionAt: new Date() })
+    .where(and(eq(userTagRelations.userId, userId), eq(userTagRelations.tagId, tagId)));
+}
+
+// Get all users connected to a specific tag
 export async function getAllNfcUsersByTagId(tagId: number) {
   const db = await getDb();
   if (!db) return [];
   
-  return db.select().from(nfcUsers).where(eq(nfcUsers.tagId, tagId)).orderBy(desc(nfcUsers.createdAt));
+  return db.select({
+    id: nfcUsers.id,
+    deviceId: nfcUsers.deviceId,
+    name: nfcUsers.name,
+    email: nfcUsers.email,
+    phone: nfcUsers.phone,
+    firstConnectionAt: userTagRelations.firstConnectionAt,
+    lastConnectionAt: userTagRelations.lastConnectionAt,
+  })
+  .from(userTagRelations)
+  .innerJoin(nfcUsers, eq(userTagRelations.userId, nfcUsers.id))
+  .where(eq(userTagRelations.tagId, tagId))
+  .orderBy(desc(userTagRelations.createdAt));
+}
+
+// Get all tags connected to a specific user
+export async function getTagsByUserId(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return db.select({
+    id: nfcTags.id,
+    uid: nfcTags.uid,
+    name: nfcTags.name,
+    firstConnectionAt: userTagRelations.firstConnectionAt,
+    lastConnectionAt: userTagRelations.lastConnectionAt,
+  })
+  .from(userTagRelations)
+  .innerJoin(nfcTags, eq(userTagRelations.tagId, nfcTags.id))
+  .where(eq(userTagRelations.userId, userId))
+  .orderBy(desc(userTagRelations.createdAt));
 }
 
 export async function getNfcUserById(id: number) {
@@ -193,9 +246,9 @@ export async function getAllNfcUsers() {
   const db = await getDb();
   if (!db) return [];
   
+  // Get all users with their connected tags count
   const result = await db.select({
     id: nfcUsers.id,
-    tagId: nfcUsers.tagId,
     deviceId: nfcUsers.deviceId,
     name: nfcUsers.name,
     email: nfcUsers.email,
@@ -210,14 +263,8 @@ export async function getAllNfcUsers() {
     lastConnectionAt: nfcUsers.lastConnectionAt,
     createdAt: nfcUsers.createdAt,
     updatedAt: nfcUsers.updatedAt,
-    tag: {
-      id: nfcTags.id,
-      uid: nfcTags.uid,
-      name: nfcTags.name,
-    },
   })
   .from(nfcUsers)
-  .leftJoin(nfcTags, eq(nfcUsers.tagId, nfcTags.id))
   .orderBy(desc(nfcUsers.createdAt));
   
   return result;
@@ -652,7 +699,7 @@ export async function getUsersWithRecentLocation(minutesAgo = 30) {
     createdAt: userLocationUpdates.createdAt,
     userName: nfcUsers.name,
     userEmail: nfcUsers.email,
-    tagId: nfcUsers.tagId,
+    deviceId: nfcUsers.deviceId,
   })
     .from(userLocationUpdates)
     .leftJoin(nfcUsers, eq(userLocationUpdates.nfcUserId, nfcUsers.id))
@@ -676,12 +723,17 @@ export async function getUsersByTagIdWithRecentLocation(tagId: number, minutesAg
   
   const cutoffTime = new Date(Date.now() - minutesAgo * 60 * 1000);
   
-  // Get users associated with this tag
-  const tagUsers = await db.select().from(nfcUsers).where(eq(nfcUsers.tagId, tagId));
+  // Get users associated with this tag through userTagRelations
+  const tagUserRelations = await db.select({
+    userId: userTagRelations.userId,
+  }).from(userTagRelations).where(eq(userTagRelations.tagId, tagId));
   
   const usersWithLocation = [];
   
-  for (const user of tagUsers) {
+  for (const relation of tagUserRelations) {
+    const [user] = await db.select().from(nfcUsers).where(eq(nfcUsers.id, relation.userId)).limit(1);
+    if (!user) continue;
+    
     const [latestLocation] = await db.select().from(userLocationUpdates)
       .where(and(
         eq(userLocationUpdates.nfcUserId, user.id),

@@ -42,11 +42,11 @@ export type InsertNfcTag = typeof nfcTags.$inferInsert;
 
 /**
  * NFC Users - users registered through NFC tag first connection
+ * Now identified by deviceId (unique per device), can connect to multiple tags
  */
 export const nfcUsers = mysqlTable("nfc_users", {
   id: int("id").autoincrement().primaryKey(),
-  tagId: int("tagId").notNull(),
-  deviceId: varchar("deviceId", { length: 64 }).notNull(), // Unique device identifier
+  deviceId: varchar("deviceId", { length: 64 }).notNull().unique(), // Unique device identifier - now the main identifier
   name: varchar("name", { length: 255 }),
   email: varchar("email", { length: 320 }),
   phone: varchar("phone", { length: 32 }),
@@ -65,6 +65,21 @@ export const nfcUsers = mysqlTable("nfc_users", {
 
 export type NfcUser = typeof nfcUsers.$inferSelect;
 export type InsertNfcUser = typeof nfcUsers.$inferInsert;
+
+/**
+ * User-Tag Relationships - many-to-many relationship between users and tags
+ */
+export const userTagRelations = mysqlTable("user_tag_relations", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  tagId: int("tagId").notNull(),
+  firstConnectionAt: timestamp("firstConnectionAt").defaultNow().notNull(),
+  lastConnectionAt: timestamp("lastConnectionAt").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type UserTagRelation = typeof userTagRelations.$inferSelect;
+export type InsertUserTagRelation = typeof userTagRelations.$inferInsert;
 
 /**
  * Connection Logs - tracks all NFC tag interactions

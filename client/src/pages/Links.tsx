@@ -182,7 +182,7 @@ export default function Links() {
                     <SelectContent className="border-2 border-black rounded-none">
                       {users?.map((user) => (
                         <SelectItem key={user.id} value={user.id.toString()}>
-                          {user.name || `Usuário #${user.id}`} - Tag #{user.tagId}
+                          {user.name || `Usuário #${user.id}`}
                         </SelectItem>
                       ))}
                     </SelectContent>
