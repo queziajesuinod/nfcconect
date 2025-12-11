@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users, Nfc, Activity, Link2, MapPin, CalendarClock } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Users, Nfc, Activity, Link2, MapPin, CalendarClock, Radio } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -29,6 +29,7 @@ import { Button } from "./ui/button";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "VISÃO GERAL", path: "/dashboard" },
+  { icon: Radio, label: "TEMPO REAL", path: "/dashboard/realtime" },
   { icon: Nfc, label: "TAGS NFC", path: "/dashboard/tags" },
   { icon: Users, label: "USUÁRIOS", path: "/dashboard/users" },
   { icon: MapPin, label: "CHECK-INS", path: "/dashboard/checkins" },

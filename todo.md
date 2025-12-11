@@ -137,3 +137,10 @@
 - [x] Validar se existe agendamento ativo no período para habilitar check-in manual
 - [x] Evitar duplicação: se fez check-in manual, não processar no automático
 - [x] Manter redirecionamento funcionando independente de agendamento
+
+## Painel de Presença em Tempo Real
+- [x] Criar endpoint para buscar check-ins do dia por agendamento ativo
+- [x] Criar página de painel em tempo real com auto-refresh
+- [x] Mostrar lista de quem já fez check-in com status (dentro/fora do raio)
+- [x] Mostrar estatísticas do agendamento ativo (total esperado vs presentes)
+- [x] Adicionar link no menu do dashboard

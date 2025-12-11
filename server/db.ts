@@ -1155,3 +1155,154 @@ export async function getUnifiedCheckinStats() {
     checkinsToday: (autoStats[0]?.today || 0) + (manualStats[0]?.today || 0),
   };
 }
+
+// ============ REAL-TIME ATTENDANCE PANEL FUNCTIONS ============
+
+// Get today's check-ins for active schedules (for real-time panel)
+export async function getTodayCheckinsForActiveSchedules() {
+  const db = await getDb();
+  if (!db) return { schedules: [], checkins: [] };
+  
+  // Get today's date range (Campo Grande MS timezone - UTC-4)
+  const now = new Date();
+  const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
+  const campoGrandeOffset = -4 * 60 * 60000;
+  const campoGrandeNow = new Date(utcTime + campoGrandeOffset);
+  
+  const startOfDay = new Date(campoGrandeNow);
+  startOfDay.setHours(0, 0, 0, 0);
+  
+  const endOfDay = new Date(campoGrandeNow);
+  endOfDay.setHours(23, 59, 59, 999);
+  
+  const currentDay = campoGrandeNow.getDay();
+  const currentMinutes = campoGrandeNow.getHours() * 60 + campoGrandeNow.getMinutes();
+  
+  // Get all active schedules for today
+  const allSchedules = await db.select()
+    .from(checkinSchedules)
+    .where(eq(checkinSchedules.isActive, true));
+  
+  // Filter schedules that match today's day
+  const todaySchedules = allSchedules.filter(schedule => {
+    const days = schedule.daysOfWeek.split(',').map(d => parseInt(d.trim()));
+    return days.includes(currentDay);
+  });
+  
+  // Mark which schedules are currently active (within time range)
+  const schedulesWithStatus = todaySchedules.map(schedule => {
+    const [startH, startM] = schedule.startTime.split(':').map(Number);
+    const [endH, endM] = schedule.endTime.split(':').map(Number);
+    const startMinutes = startH * 60 + startM;
+    const endMinutes = endH * 60 + endM;
+    
+    const isActiveNow = currentMinutes >= startMinutes && currentMinutes <= endMinutes;
+    
+    return {
+      ...schedule,
+      isActiveNow,
+    };
+  });
+  
+  // Get all check-ins for today (both automatic and manual)
+  const autoCheckins = await db.select({
+    id: automaticCheckins.id,
+    type: sql<string>`'automatic'`.as('type'),
+    scheduleId: automaticCheckins.scheduleId,
+    tagId: automaticCheckins.tagId,
+    nfcUserId: automaticCheckins.nfcUserId,
+    distanceMeters: automaticCheckins.distanceMeters,
+    isWithinRadius: automaticCheckins.isWithinRadius,
+    createdAt: automaticCheckins.createdAt,
+    userName: nfcUsers.name,
+    userEmail: nfcUsers.email,
+    userPhone: nfcUsers.phone,
+    tagName: nfcTags.name,
+    tagUid: nfcTags.uid,
+  })
+    .from(automaticCheckins)
+    .leftJoin(nfcUsers, eq(automaticCheckins.nfcUserId, nfcUsers.id))
+    .leftJoin(nfcTags, eq(automaticCheckins.tagId, nfcTags.id))
+    .where(
+      and(
+        gte(automaticCheckins.createdAt, startOfDay),
+        lte(automaticCheckins.createdAt, endOfDay)
+      )
+    )
+    .orderBy(desc(automaticCheckins.createdAt));
+  
+  // Get manual check-ins for today
+  const manualCheckins = await db.select({
+    id: checkins.id,
+    type: sql<string>`'manual'`.as('type'),
+    scheduleId: sql<number | null>`NULL`.as('scheduleId'),
+    tagId: checkins.tagId,
+    nfcUserId: checkins.nfcUserId,
+    distanceMeters: checkins.distanceMeters,
+    isWithinRadius: checkins.isWithinRadius,
+    createdAt: checkins.createdAt,
+    userName: nfcUsers.name,
+    userEmail: nfcUsers.email,
+    userPhone: nfcUsers.phone,
+    tagName: nfcTags.name,
+    tagUid: nfcTags.uid,
+  })
+    .from(checkins)
+    .leftJoin(nfcUsers, eq(checkins.nfcUserId, nfcUsers.id))
+    .leftJoin(nfcTags, eq(checkins.tagId, nfcTags.id))
+    .where(
+      and(
+        gte(checkins.createdAt, startOfDay),
+        lte(checkins.createdAt, endOfDay)
+      )
+    )
+    .orderBy(desc(checkins.createdAt));
+  
+  // Combine all check-ins
+  const allCheckins = [...autoCheckins, ...manualCheckins]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  
+  // Get total users per schedule (from tag relations)
+  const schedulesWithCounts = await Promise.all(schedulesWithStatus.map(async (schedule) => {
+    // Get tags for this schedule
+    const tagRelations = await getScheduleTagRelations(schedule.id);
+    const tagIds = tagRelations.map(r => r.tagId);
+    
+    // If no relations, use legacy tagId
+    if (tagIds.length === 0 && schedule.tagId) {
+      tagIds.push(schedule.tagId);
+    }
+    
+    // Count total users connected to these tags
+    let totalUsers = 0;
+    for (const tagId of tagIds) {
+      const users = await db.select({ count: sql<number>`count(*)` })
+        .from(userTagRelations)
+        .where(eq(userTagRelations.tagId, tagId));
+      totalUsers += users[0]?.count || 0;
+    }
+    
+    // Count check-ins for this schedule today
+    const scheduleCheckins = allCheckins.filter(c => 
+      c.scheduleId === schedule.id || tagIds.includes(c.tagId)
+    );
+    
+    // Get unique users who checked in
+    const uniqueUserIds = new Set(scheduleCheckins.map(c => c.nfcUserId));
+    
+    return {
+      ...schedule,
+      totalUsers,
+      checkedInCount: uniqueUserIds.size,
+      checkins: scheduleCheckins,
+      tagIds,
+    };
+  }));
+  
+  return {
+    schedules: schedulesWithCounts,
+    allCheckins,
+    currentTime: `${String(campoGrandeNow.getHours()).padStart(2, '0')}:${String(campoGrandeNow.getMinutes()).padStart(2, '0')}`,
+    currentDay,
+  };
+}

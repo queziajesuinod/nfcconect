@@ -17,7 +17,8 @@ import {
   createAutomaticCheckin, getAllAutomaticCheckins, getAutomaticCheckinsByScheduleId, updateAutomaticCheckinStatus, hasUserCheckinForScheduleToday,
   createUserLocationUpdate, getLatestUserLocation, getUsersWithRecentLocation, getUsersByTagIdWithRecentLocation,
   getScheduleTagRelations, addScheduleTagRelation, removeScheduleTagRelation, setScheduleTagRelations, getAllCheckinSchedulesWithTags, getActiveSchedulesForDayWithTags,
-  getAllUnifiedCheckins, hasUserCheckinForTagToday, getActiveScheduleForTag, getUnifiedCheckinStats
+  getAllUnifiedCheckins, hasUserCheckinForTagToday, getActiveScheduleForTag, getUnifiedCheckinStats,
+  getTodayCheckinsForActiveSchedules
 } from "./db";
 
 // Helper function to get current date/time in Campo Grande MS timezone (UTC-4)
@@ -641,6 +642,12 @@ export const appRouter = router({
           scheduleName: schedule.name,
         };
       }),
+
+    // Real-time attendance panel - get today's check-ins for active schedules
+    realtimePanel: adminProcedure.query(async () => {
+      const data = await getTodayCheckinsForActiveSchedules();
+      return data;
+    }),
   }),
 
   // ============ CHECK-IN SCHEDULE ROUTES ============

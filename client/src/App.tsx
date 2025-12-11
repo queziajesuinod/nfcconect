@@ -15,6 +15,7 @@ import LinkRedirect from "./pages/LinkRedirect";
 import Checkins from "./pages/Checkins";
 import Schedules from "./pages/Schedules";
 import UserApp from "./pages/UserApp";
+import RealtimePanel from "./pages/RealtimePanel";
 
 function Router() {
   return (
@@ -33,6 +34,7 @@ function Router() {
       <Route path="/dashboard/links" component={Links} />
       <Route path="/dashboard/checkins" component={Checkins} />
       <Route path="/dashboard/schedules" component={Schedules} />
+      <Route path="/dashboard/realtime" component={RealtimePanel} />
       
       {/* Fallback */}
       <Route path="/404" component={NotFound} />
