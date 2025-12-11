@@ -591,12 +591,12 @@ export const appRouter = router({
           });
         }
         
-        // Check if user already has check-in today for this tag
-        const alreadyCheckedIn = await hasUserCheckinForTagToday(input.tagId, input.nfcUserId, now);
+        // Check if user already has check-in today for this SCHEDULE (any tag)
+        const alreadyCheckedIn = await hasUserCheckinForScheduleToday(schedule.id, input.nfcUserId, now);
         if (alreadyCheckedIn) {
           throw new TRPCError({ 
             code: 'BAD_REQUEST', 
-            message: 'Você já fez check-in hoje para esta tag.' 
+            message: 'Você já fez check-in hoje para este agendamento.' 
           });
         }
         

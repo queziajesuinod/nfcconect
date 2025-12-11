@@ -154,3 +154,7 @@
 ## Correção do Fluxo de Check-in
 - [x] Usuário já cadastrado: fazer check-in automático ao acessar tag NFC
 - [x] Usuário novo: fazer check-in automático após completar cadastro
+
+## Evitar Check-in Duplicado por Agendamento
+- [x] Verificar se usuário já fez check-in em qualquer tag do mesmo agendamento no dia
+- [x] Se já fez check-in, apenas redirecionar sem registrar novamente
