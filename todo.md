@@ -100,3 +100,6 @@
 - [x] Vincular usuário existente a novas tags automaticamente
 - [x] Atualizar listagem de usuários para mostrar tags vinculadas
 - [x] Evitar cadastros duplicados do mesmo dispositivo
+
+## Correções Urgentes
+- [x] Verificar e manter campos de geolocalização do usuário para check-in (já estava funcionando)
