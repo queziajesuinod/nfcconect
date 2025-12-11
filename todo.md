@@ -118,3 +118,10 @@
 - [x] Seção de execução do dia: mostrar apenas agendamentos aplicáveis ao dia/período atual
 - [x] Botão de executar apenas nos agendamentos do dia/período atual
 - [x] Histórico de check-ins filtrado apenas para o dia atual
+
+## Múltiplas Tags por Agendamento
+- [x] Criar tabela de relacionamento agendamento-tags (N:N)
+- [x] Permitir selecionar múltiplas tags no cadastro de agendamento
+- [x] Adicionar opção "Todas as Tags" no cadastro
+- [x] Permitir editar tags em agendamentos existentes
+- [x] Atualizar lógica de execução de check-in para processar múltiplas tags

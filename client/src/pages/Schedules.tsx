@@ -3,12 +3,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { trpc } from "@/lib/trpc";
-import { Calendar, Clock, Plus, Trash2, Play, Loader2, MapPin, CheckCircle, XCircle, Settings, Zap } from "lucide-react";
+import { Calendar, Clock, Plus, Trash2, Play, Loader2, MapPin, CheckCircle, XCircle, Settings, Zap, Tag, Edit } from "lucide-react";
 import { useState, useMemo } from "react";
 import { toast } from "sonner";
 
@@ -46,9 +46,12 @@ function isWithinSchedulePeriod(startTime: string, endTime: string): boolean {
 
 export default function Schedules() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingSchedule, setEditingSchedule] = useState<any>(null);
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
+  const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
+  const [selectAllTags, setSelectAllTags] = useState(false);
   const [formData, setFormData] = useState({
-    tagId: "",
     name: "",
     description: "",
     startTime: "08:00",
@@ -76,6 +79,8 @@ export default function Schedules() {
     onSuccess: () => {
       toast.success("Agendamento atualizado!");
       utils.schedules.list.invalidate();
+      setIsEditDialogOpen(false);
+      setEditingSchedule(null);
     },
     onError: (error) => {
       toast.error(error.message);
@@ -103,17 +108,58 @@ export default function Schedules() {
   });
 
   const resetForm = () => {
-    setFormData({ tagId: "", name: "", description: "", startTime: "08:00", endTime: "10:00" });
+    setFormData({ name: "", description: "", startTime: "08:00", endTime: "10:00" });
     setSelectedDays([]);
+    setSelectedTagIds([]);
+    setSelectAllTags(false);
   };
 
   const handleCreate = () => {
-    if (!formData.tagId || selectedDays.length === 0) {
-      toast.error("Selecione uma tag e pelo menos um dia da semana");
+    const tagIdsToUse = selectAllTags ? eligibleTags.map(t => t.id) : selectedTagIds;
+    
+    if (tagIdsToUse.length === 0 || selectedDays.length === 0) {
+      toast.error("Selecione pelo menos uma tag e um dia da semana");
       return;
     }
     createMutation.mutate({
-      tagId: parseInt(formData.tagId),
+      tagIds: tagIdsToUse,
+      name: formData.name || undefined,
+      description: formData.description || undefined,
+      daysOfWeek: selectedDays.join(","),
+      startTime: formData.startTime,
+      endTime: formData.endTime,
+    });
+  };
+
+  const handleEdit = (schedule: any) => {
+    setEditingSchedule(schedule);
+    setFormData({
+      name: schedule.name || "",
+      description: schedule.description || "",
+      startTime: schedule.startTime,
+      endTime: schedule.endTime,
+    });
+    setSelectedDays(schedule.daysOfWeek.split(","));
+    // Set selected tags from schedule.tags array
+    const tagIds = schedule.tags?.map((t: any) => t.id) || [];
+    setSelectedTagIds(tagIds);
+    setSelectAllTags(tagIds.length === eligibleTags.length && eligibleTags.length > 0);
+    setIsEditDialogOpen(true);
+  };
+
+  const handleUpdate = () => {
+    if (!editingSchedule) return;
+    
+    const tagIdsToUse = selectAllTags ? eligibleTags.map(t => t.id) : selectedTagIds;
+    
+    if (tagIdsToUse.length === 0 || selectedDays.length === 0) {
+      toast.error("Selecione pelo menos uma tag e um dia da semana");
+      return;
+    }
+
+    updateMutation.mutate({
+      id: editingSchedule.id,
+      tagIds: tagIdsToUse,
       name: formData.name || undefined,
       description: formData.description || undefined,
       daysOfWeek: selectedDays.join(","),
@@ -128,9 +174,31 @@ export default function Schedules() {
     );
   };
 
+  const toggleTag = (tagId: number) => {
+    setSelectedTagIds(prev => 
+      prev.includes(tagId) ? prev.filter(id => id !== tagId) : [...prev, tagId]
+    );
+    setSelectAllTags(false);
+  };
+
+  const handleSelectAllTags = (checked: boolean) => {
+    setSelectAllTags(checked);
+    if (checked) {
+      setSelectedTagIds(eligibleTags.map(t => t.id));
+    } else {
+      setSelectedTagIds([]);
+    }
+  };
+
   const formatDays = (daysStr: string) => {
     const days = daysStr.split(",").map(d => parseInt(d.trim()));
     return days.map(d => DAYS_OF_WEEK.find(day => day.value === String(d))?.label?.slice(0, 3)).join(", ");
+  };
+
+  const formatTags = (tagsArray: any[]) => {
+    if (!tagsArray || tagsArray.length === 0) return "Nenhuma tag";
+    if (tagsArray.length === 1) return tagsArray[0].name || tagsArray[0].uid;
+    return `${tagsArray.length} tags`;
   };
 
   // Filter tags that have geolocation and check-in enabled
@@ -166,6 +234,50 @@ export default function Schedules() {
       return checkinDate >= todayStart;
     });
   }, [automaticCheckins]);
+
+  // Tag selection component for dialogs
+  const TagSelectionSection = () => (
+    <div>
+      <Label className="font-bold mb-2 block">Tags NFC *</Label>
+      <div className="border-2 border-black p-3 max-h-48 overflow-y-auto">
+        <div className="flex items-center gap-2 mb-3 pb-2 border-b-2 border-gray-200">
+          <Checkbox
+            id="select-all-tags"
+            checked={selectAllTags}
+            onCheckedChange={handleSelectAllTags}
+          />
+          <label htmlFor="select-all-tags" className="font-bold cursor-pointer">
+            TODAS AS TAGS ({eligibleTags.length})
+          </label>
+        </div>
+        {eligibleTags.length === 0 ? (
+          <p className="text-sm text-red-600">
+            Nenhuma tag elegível. Configure localização e habilite check-in em uma tag.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {eligibleTags.map((tag) => (
+              <div key={tag.id} className="flex items-center gap-2">
+                <Checkbox
+                  id={`tag-${tag.id}`}
+                  checked={selectedTagIds.includes(tag.id)}
+                  onCheckedChange={() => toggleTag(tag.id)}
+                  disabled={selectAllTags}
+                />
+                <label htmlFor={`tag-${tag.id}`} className="text-sm cursor-pointer flex-1">
+                  <span className="font-medium">{tag.name || tag.uid}</span>
+                  <span className="text-gray-500 ml-2">(Raio: {tag.radiusMeters}m)</span>
+                </label>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <p className="text-xs text-gray-500 mt-1">
+        {selectAllTags ? "Todas as tags selecionadas" : `${selectedTagIds.length} tag(s) selecionada(s)`}
+      </p>
+    </div>
+  );
 
   return (
     <DashboardLayout>
@@ -216,11 +328,10 @@ export default function Schedules() {
                           </span>
                         )}
                       </div>
-                      {schedule.tag && (
-                        <p className="text-sm text-gray-600">
-                          Tag: {schedule.tag.name || schedule.tag.uid}
-                        </p>
-                      )}
+                      <div className="flex items-center gap-1 text-sm text-gray-600">
+                        <Tag className="w-3 h-3" />
+                        <span>{formatTags(schedule.tags)}</span>
+                      </div>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-3">
@@ -352,36 +463,17 @@ export default function Schedules() {
             </div>
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
-                <Button className="bg-black text-white hover:bg-gray-800 font-bold">
+                <Button className="bg-black text-white hover:bg-gray-800 font-bold" onClick={resetForm}>
                   <Plus className="w-5 h-5 mr-2" />
                   NOVO AGENDAMENTO
                 </Button>
               </DialogTrigger>
-              <DialogContent className="border-4 border-black max-w-lg">
+              <DialogContent className="border-4 border-black max-w-lg max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle className="text-2xl font-black">NOVO AGENDAMENTO</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4 mt-4">
-                  <div>
-                    <Label className="font-bold">Tag NFC *</Label>
-                    <Select value={formData.tagId} onValueChange={(v) => setFormData({ ...formData, tagId: v })}>
-                      <SelectTrigger className="border-2 border-black mt-1">
-                        <SelectValue placeholder="Selecione uma tag" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {eligibleTags.map((tag) => (
-                          <SelectItem key={tag.id} value={String(tag.id)}>
-                            {tag.name || tag.uid} (Raio: {tag.radiusMeters}m)
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {eligibleTags.length === 0 && (
-                      <p className="text-sm text-red-600 mt-1">
-                        Nenhuma tag elegível. Configure localização e habilite check-in em uma tag.
-                      </p>
-                    )}
-                  </div>
+                  <TagSelectionSection />
 
                   <div>
                     <Label className="font-bold">Nome do Agendamento</Label>
@@ -443,7 +535,7 @@ export default function Schedules() {
 
                   <div className="bg-gray-100 p-3 border-2 border-black">
                     <p className="text-sm">
-                      <strong>Como funciona:</strong> O sistema verificará usuários dentro do raio da tag 
+                      <strong>Como funciona:</strong> O sistema verificará usuários dentro do raio das tags selecionadas 
                       durante o período configurado e registrará check-in automaticamente.
                     </p>
                   </div>
@@ -464,6 +556,89 @@ export default function Schedules() {
               </DialogContent>
             </Dialog>
           </div>
+
+          {/* Edit Dialog */}
+          <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+            <DialogContent className="border-4 border-black max-w-lg max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="text-2xl font-black">EDITAR AGENDAMENTO</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 mt-4">
+                <TagSelectionSection />
+
+                <div>
+                  <Label className="font-bold">Nome do Agendamento</Label>
+                  <Input
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="Ex: Culto Domingo"
+                    className="border-2 border-black mt-1"
+                  />
+                </div>
+
+                <div>
+                  <Label className="font-bold">Descrição</Label>
+                  <Textarea
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    placeholder="Descrição opcional..."
+                    className="border-2 border-black mt-1"
+                  />
+                </div>
+
+                <div>
+                  <Label className="font-bold mb-2 block">Dias da Semana *</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {DAYS_OF_WEEK.map((day) => (
+                      <Button
+                        key={day.value}
+                        type="button"
+                        variant={selectedDays.includes(day.value) ? "default" : "outline"}
+                        className={`${selectedDays.includes(day.value) ? "bg-black text-white" : "border-2 border-black"}`}
+                        onClick={() => toggleDay(day.value)}
+                      >
+                        {day.label.slice(0, 3)}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="font-bold">Horário Início *</Label>
+                    <Input
+                      type="time"
+                      value={formData.startTime}
+                      onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
+                      className="border-2 border-black mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label className="font-bold">Horário Fim *</Label>
+                    <Input
+                      type="time"
+                      value={formData.endTime}
+                      onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
+                      className="border-2 border-black mt-1"
+                    />
+                  </div>
+                </div>
+
+                <Button
+                  onClick={handleUpdate}
+                  disabled={updateMutation.isPending}
+                  className="w-full bg-black text-white hover:bg-gray-800 font-bold"
+                >
+                  {updateMutation.isPending ? (
+                    <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                  ) : (
+                    <Edit className="w-5 h-5 mr-2" />
+                  )}
+                  SALVAR ALTERAÇÕES
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
 
           {/* All Schedules Grid */}
           {isLoading ? (
@@ -486,11 +661,10 @@ export default function Schedules() {
                         }
                       />
                     </div>
-                    {schedule.tag && (
-                      <p className="text-sm text-gray-600">
-                        Tag: {schedule.tag.name || schedule.tag.uid}
-                      </p>
-                    )}
+                    <div className="flex items-center gap-1 text-sm text-gray-600">
+                      <Tag className="w-3 h-3" />
+                      <span>{formatTags(schedule.tags)}</span>
+                    </div>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-3">
@@ -509,11 +683,19 @@ export default function Schedules() {
                         <Button
                           variant="outline"
                           size="sm"
-                          className="flex-1 border-2 border-red-600 text-red-600 hover:bg-red-50"
+                          className="flex-1 border-2 border-black font-bold"
+                          onClick={() => handleEdit(schedule)}
+                        >
+                          <Edit className="w-4 h-4 mr-1" />
+                          EDITAR
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-2 border-red-600 text-red-600 hover:bg-red-50"
                           onClick={() => deleteMutation.mutate({ id: schedule.id })}
                         >
-                          <Trash2 className="w-4 h-4 mr-1" />
-                          EXCLUIR
+                          <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
                     </div>

@@ -15,7 +15,8 @@ import {
   getStats,
   createCheckinSchedule, getCheckinScheduleById, getCheckinSchedulesByTagId, getAllCheckinSchedules, getActiveSchedulesForDay, updateCheckinSchedule, deleteCheckinSchedule,
   createAutomaticCheckin, getAllAutomaticCheckins, getAutomaticCheckinsByScheduleId, updateAutomaticCheckinStatus, hasUserCheckinForScheduleToday,
-  createUserLocationUpdate, getLatestUserLocation, getUsersWithRecentLocation, getUsersByTagIdWithRecentLocation
+  createUserLocationUpdate, getLatestUserLocation, getUsersWithRecentLocation, getUsersByTagIdWithRecentLocation,
+  getScheduleTagRelations, addScheduleTagRelation, removeScheduleTagRelation, setScheduleTagRelations, getAllCheckinSchedulesWithTags, getActiveSchedulesForDayWithTags
 } from "./db";
 
 // Helper function to calculate distance between two coordinates (Haversine formula)
@@ -533,9 +534,9 @@ export const appRouter = router({
 
   // ============ CHECK-IN SCHEDULE ROUTES ============
   schedules: router({
-    // Admin: list all schedules
+    // Admin: list all schedules with their tags
     list: adminProcedure.query(async () => {
-      return getAllCheckinSchedules();
+      return getAllCheckinSchedulesWithTags();
     }),
 
     // Admin: get schedule by ID
@@ -554,10 +555,10 @@ export const appRouter = router({
         return getCheckinSchedulesByTagId(input.tagId);
       }),
 
-    // Admin: create schedule
+    // Admin: create schedule with multiple tags
     create: adminProcedure
       .input(z.object({
-        tagId: z.number(),
+        tagIds: z.array(z.number()).min(1), // Array of tag IDs
         name: z.string().optional(),
         description: z.string().optional(),
         daysOfWeek: z.string(), // "0,3,6" for Sun, Wed, Sat
@@ -566,14 +567,16 @@ export const appRouter = router({
         timezone: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
-        // Validate tag exists and has geolocation
-        const tag = await getNfcTagById(input.tagId);
-        if (!tag) throw new TRPCError({ code: 'NOT_FOUND', message: 'Tag não encontrada' });
-        if (!tag.latitude || !tag.longitude) {
-          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Tag precisa ter localização configurada para agendamentos' });
-        }
-        if (!tag.enableCheckin) {
-          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Tag precisa ter check-in habilitado' });
+        // Validate all tags exist and have geolocation
+        for (const tagId of input.tagIds) {
+          const tag = await getNfcTagById(tagId);
+          if (!tag) throw new TRPCError({ code: 'NOT_FOUND', message: `Tag ID ${tagId} não encontrada` });
+          if (!tag.latitude || !tag.longitude) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: `Tag ${tag.name || tag.uid} precisa ter localização configurada` });
+          }
+          if (!tag.enableCheckin) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: `Tag ${tag.name || tag.uid} precisa ter check-in habilitado` });
+          }
         }
 
         // Validate time format
@@ -588,8 +591,9 @@ export const appRouter = router({
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Dias da semana inválidos. Use 0-6 (0=Domingo)' });
         }
 
-        return createCheckinSchedule({
-          tagId: input.tagId,
+        // Create schedule with first tag as legacy tagId
+        const result = await createCheckinSchedule({
+          tagId: input.tagIds[0],
           name: input.name || null,
           description: input.description || null,
           daysOfWeek: input.daysOfWeek,
@@ -597,6 +601,11 @@ export const appRouter = router({
           endTime: input.endTime,
           timezone: input.timezone || 'America/Sao_Paulo',
         });
+
+        // Create tag relations for all tags
+        await setScheduleTagRelations(result.id, input.tagIds);
+
+        return result;
       }),
 
     // Admin: update schedule
@@ -610,11 +619,38 @@ export const appRouter = router({
         endTime: z.string().optional(),
         isActive: z.boolean().optional(),
         timezone: z.string().optional(),
+        tagIds: z.array(z.number()).optional(), // Optional: update tags
       }))
       .mutation(async ({ input }) => {
-        const { id, ...data } = input;
-        await updateCheckinSchedule(id, data);
+        const { id, tagIds, ...data } = input;
+        
+        // If tagIds provided, validate and update tag relations
+        if (tagIds && tagIds.length > 0) {
+          for (const tagId of tagIds) {
+            const tag = await getNfcTagById(tagId);
+            if (!tag) throw new TRPCError({ code: 'NOT_FOUND', message: `Tag ID ${tagId} não encontrada` });
+            if (!tag.latitude || !tag.longitude) {
+              throw new TRPCError({ code: 'BAD_REQUEST', message: `Tag ${tag.name || tag.uid} precisa ter localização configurada` });
+            }
+            if (!tag.enableCheckin) {
+              throw new TRPCError({ code: 'BAD_REQUEST', message: `Tag ${tag.name || tag.uid} precisa ter check-in habilitado` });
+            }
+          }
+          await setScheduleTagRelations(id, tagIds);
+          // Update legacy tagId to first tag
+          await updateCheckinSchedule(id, { ...data, tagId: tagIds[0] });
+        } else {
+          await updateCheckinSchedule(id, data);
+        }
+        
         return { success: true };
+      }),
+
+    // Admin: get tags for a schedule
+    getTags: adminProcedure
+      .input(z.object({ scheduleId: z.number() }))
+      .query(async ({ input }) => {
+        return getScheduleTagRelations(input.scheduleId);
       }),
 
     // Admin: delete schedule
@@ -626,74 +662,119 @@ export const appRouter = router({
       }),
 
     // Admin: trigger automatic check-in for a schedule (manual trigger for testing)
+    // Now processes all tags associated with the schedule
     triggerCheckin: adminProcedure
       .input(z.object({ scheduleId: z.number() }))
       .mutation(async ({ input }) => {
         const schedule = await getCheckinScheduleById(input.scheduleId);
         if (!schedule) throw new TRPCError({ code: 'NOT_FOUND', message: 'Agendamento não encontrado' });
 
-        const tag = await getNfcTagById(schedule.tagId);
-        if (!tag || !tag.latitude || !tag.longitude) {
-          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Tag sem localização configurada' });
+        // Get all tags for this schedule
+        const tagRelations = await getScheduleTagRelations(input.scheduleId);
+        
+        // If no relations exist, fall back to legacy single tag
+        let tagsToProcess: Array<{ id: number; latitude: string | null; longitude: string | null; radiusMeters: number | null; name: string | null; uid: string | null }> = [];
+        
+        if (tagRelations.length > 0) {
+          tagsToProcess = tagRelations.map(r => ({
+            id: r.tagId,
+            latitude: r.tagLatitude,
+            longitude: r.tagLongitude,
+            radiusMeters: r.tagRadiusMeters,
+            name: r.tagName,
+            uid: r.tagUid,
+          }));
+        } else {
+          const legacyTag = await getNfcTagById(schedule.tagId);
+          if (legacyTag) {
+            tagsToProcess = [{
+              id: legacyTag.id,
+              latitude: legacyTag.latitude,
+              longitude: legacyTag.longitude,
+              radiusMeters: legacyTag.radiusMeters,
+              name: legacyTag.name,
+              uid: legacyTag.uid,
+            }];
+          }
         }
 
-        // Get users with recent location for this tag
-        const usersWithLocation = await getUsersByTagIdWithRecentLocation(schedule.tagId, 60);
+        if (tagsToProcess.length === 0) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Nenhuma tag configurada para este agendamento' });
+        }
 
-        const results = [];
-        const skipped = [];
+        const results: Array<{ userId: number; userName: string | null; tagName: string | null; distance: number; isWithinRadius: boolean; checkinId: number }> = [];
+        const skipped: Array<{ userId: number; userName: string | null; reason: string }> = [];
         const now = new Date();
+        const processedUsers = new Set<number>(); // Track users already processed
 
-        for (const { user, location } of usersWithLocation) {
-          // Check if user already has a check-in for this schedule today
-          const alreadyCheckedIn = await hasUserCheckinForScheduleToday(schedule.id, user.id, now);
-          
-          if (alreadyCheckedIn) {
-            skipped.push({
+        // Process each tag
+        for (const tag of tagsToProcess) {
+          if (!tag.latitude || !tag.longitude) continue;
+
+          // Get users with recent location for this tag
+          const usersWithLocation = await getUsersByTagIdWithRecentLocation(tag.id, 60);
+
+          for (const { user, location } of usersWithLocation) {
+            // Skip if user already processed in another tag
+            if (processedUsers.has(user.id)) continue;
+
+            // Check if user already has a check-in for this schedule today
+            const alreadyCheckedIn = await hasUserCheckinForScheduleToday(schedule.id, user.id, now);
+            
+            if (alreadyCheckedIn) {
+              if (!processedUsers.has(user.id)) {
+                skipped.push({
+                  userId: user.id,
+                  userName: user.name,
+                  reason: 'Já fez check-in neste período hoje',
+                });
+                processedUsers.add(user.id);
+              }
+              continue;
+            }
+
+            const userLat = parseFloat(location.latitude);
+            const userLon = parseFloat(location.longitude);
+            const tagLat = parseFloat(tag.latitude);
+            const tagLon = parseFloat(tag.longitude);
+
+            const distance = Math.round(calculateDistance(tagLat, tagLon, userLat, userLon));
+            const isWithinRadius = distance <= (tag.radiusMeters || 100);
+
+            // Create automatic check-in record
+            const checkinResult = await createAutomaticCheckin({
+              scheduleId: schedule.id,
+              tagId: tag.id,
+              nfcUserId: user.id,
+              userLatitude: location.latitude,
+              userLongitude: location.longitude,
+              distanceMeters: distance,
+              isWithinRadius,
+              scheduledDate: now,
+              periodStart: schedule.startTime,
+              periodEnd: schedule.endTime,
+              checkinTime: now,
+              status: isWithinRadius ? 'completed' : 'failed',
+              errorMessage: isWithinRadius ? null : `Usuário fora do raio (${distance}m > ${tag.radiusMeters}m)`,
+            });
+
+            results.push({
               userId: user.id,
               userName: user.name,
-              reason: 'Já fez check-in neste período hoje',
+              tagName: tag.name || tag.uid,
+              distance,
+              isWithinRadius,
+              checkinId: checkinResult.id,
             });
-            continue;
+
+            processedUsers.add(user.id);
           }
-
-          const userLat = parseFloat(location.latitude);
-          const userLon = parseFloat(location.longitude);
-          const tagLat = parseFloat(tag.latitude);
-          const tagLon = parseFloat(tag.longitude);
-
-          const distance = Math.round(calculateDistance(tagLat, tagLon, userLat, userLon));
-          const isWithinRadius = distance <= (tag.radiusMeters || 100);
-
-          // Create automatic check-in record
-          const checkinResult = await createAutomaticCheckin({
-            scheduleId: schedule.id,
-            tagId: schedule.tagId,
-            nfcUserId: user.id,
-            userLatitude: location.latitude,
-            userLongitude: location.longitude,
-            distanceMeters: distance,
-            isWithinRadius,
-            scheduledDate: now,
-            periodStart: schedule.startTime,
-            periodEnd: schedule.endTime,
-            checkinTime: now,
-            status: isWithinRadius ? 'completed' : 'failed',
-            errorMessage: isWithinRadius ? null : `Usuário fora do raio (${distance}m > ${tag.radiusMeters}m)`,
-          });
-
-          results.push({
-            userId: user.id,
-            userName: user.name,
-            distance,
-            isWithinRadius,
-            checkinId: checkinResult.id,
-          });
         }
 
         return {
           success: true,
           scheduleName: schedule.name,
+          tagsProcessed: tagsToProcess.length,
           usersProcessed: results.length,
           usersSkipped: skipped.length,
           usersWithinRadius: results.filter(r => r.isWithinRadius).length,

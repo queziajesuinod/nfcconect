@@ -43,6 +43,13 @@
       "when": 1765421762010,
       "tag": "0005_free_silver_fox",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1765426037229,
+      "tag": "0006_flashy_boom_boom",
+      "breakpoints": true
     }
   ]
 }

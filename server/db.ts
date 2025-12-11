@@ -10,7 +10,8 @@ import {
   checkins, InsertCheckin,
   checkinSchedules, InsertCheckinSchedule,
   automaticCheckins, InsertAutomaticCheckin,
-  userLocationUpdates, InsertUserLocationUpdate
+  userLocationUpdates, InsertUserLocationUpdate,
+  scheduleTagRelations, InsertScheduleTagRelation
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -777,4 +778,194 @@ export async function hasUserCheckinForScheduleToday(scheduleId: number, nfcUser
     );
   
   return (result[0]?.count || 0) > 0;
+}
+
+// ============ SCHEDULE-TAG RELATIONS FUNCTIONS ============
+
+export async function getScheduleTagRelations(scheduleId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const results = await db.select({
+    id: scheduleTagRelations.id,
+    scheduleId: scheduleTagRelations.scheduleId,
+    tagId: scheduleTagRelations.tagId,
+    tagUid: nfcTags.uid,
+    tagName: nfcTags.name,
+    tagLatitude: nfcTags.latitude,
+    tagLongitude: nfcTags.longitude,
+    tagRadiusMeters: nfcTags.radiusMeters,
+  })
+    .from(scheduleTagRelations)
+    .leftJoin(nfcTags, eq(scheduleTagRelations.tagId, nfcTags.id))
+    .where(eq(scheduleTagRelations.scheduleId, scheduleId));
+  
+  return results;
+}
+
+export async function addScheduleTagRelation(scheduleId: number, tagId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  // Check if relation already exists
+  const existing = await db.select()
+    .from(scheduleTagRelations)
+    .where(and(
+      eq(scheduleTagRelations.scheduleId, scheduleId),
+      eq(scheduleTagRelations.tagId, tagId)
+    ))
+    .limit(1);
+  
+  if (existing.length > 0) return { id: existing[0].id };
+  
+  const result = await db.insert(scheduleTagRelations).values({ scheduleId, tagId });
+  return { id: result[0].insertId };
+}
+
+export async function removeScheduleTagRelation(scheduleId: number, tagId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.delete(scheduleTagRelations)
+    .where(and(
+      eq(scheduleTagRelations.scheduleId, scheduleId),
+      eq(scheduleTagRelations.tagId, tagId)
+    ));
+}
+
+export async function setScheduleTagRelations(scheduleId: number, tagIds: number[]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  // Delete all existing relations for this schedule
+  await db.delete(scheduleTagRelations)
+    .where(eq(scheduleTagRelations.scheduleId, scheduleId));
+  
+  // Add new relations
+  if (tagIds.length > 0) {
+    const values = tagIds.map(tagId => ({ scheduleId, tagId }));
+    await db.insert(scheduleTagRelations).values(values);
+  }
+}
+
+export async function getAllCheckinSchedulesWithTags() {
+  const db = await getDb();
+  if (!db) return [];
+  
+  // Get all schedules
+  const schedules = await db.select({
+    id: checkinSchedules.id,
+    tagId: checkinSchedules.tagId, // Legacy single tag
+    name: checkinSchedules.name,
+    description: checkinSchedules.description,
+    daysOfWeek: checkinSchedules.daysOfWeek,
+    startTime: checkinSchedules.startTime,
+    endTime: checkinSchedules.endTime,
+    isActive: checkinSchedules.isActive,
+    timezone: checkinSchedules.timezone,
+    createdAt: checkinSchedules.createdAt,
+    updatedAt: checkinSchedules.updatedAt,
+  })
+    .from(checkinSchedules)
+    .orderBy(desc(checkinSchedules.createdAt));
+  
+  // For each schedule, get its tags
+  const schedulesWithTags = await Promise.all(schedules.map(async (schedule) => {
+    // Get tags from the new relation table
+    const tagRelations = await getScheduleTagRelations(schedule.id);
+    
+    // If no relations exist but there's a legacy tagId, include that
+    let tags = tagRelations.map(r => ({
+      id: r.tagId,
+      uid: r.tagUid,
+      name: r.tagName,
+      latitude: r.tagLatitude,
+      longitude: r.tagLongitude,
+      radiusMeters: r.tagRadiusMeters,
+    }));
+    
+    if (tags.length === 0 && schedule.tagId) {
+      // Fallback to legacy single tag
+      const [legacyTag] = await db.select().from(nfcTags).where(eq(nfcTags.id, schedule.tagId)).limit(1);
+      if (legacyTag) {
+        tags = [{
+          id: legacyTag.id,
+          uid: legacyTag.uid,
+          name: legacyTag.name,
+          latitude: legacyTag.latitude,
+          longitude: legacyTag.longitude,
+          radiusMeters: legacyTag.radiusMeters,
+        }];
+      }
+    }
+    
+    return {
+      ...schedule,
+      tags,
+      // Keep legacy tag field for backwards compatibility
+      tag: tags.length > 0 ? { uid: tags[0].uid, name: tags[0].name } : null,
+    };
+  }));
+  
+  return schedulesWithTags;
+}
+
+export async function getActiveSchedulesForDayWithTags(dayOfWeek: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  // Get all active schedules
+  const allSchedules = await db.select({
+    id: checkinSchedules.id,
+    tagId: checkinSchedules.tagId,
+    name: checkinSchedules.name,
+    daysOfWeek: checkinSchedules.daysOfWeek,
+    startTime: checkinSchedules.startTime,
+    endTime: checkinSchedules.endTime,
+    timezone: checkinSchedules.timezone,
+  })
+    .from(checkinSchedules)
+    .where(eq(checkinSchedules.isActive, true));
+  
+  // Filter schedules that include the specified day
+  const filteredSchedules = allSchedules.filter(s => {
+    const days = s.daysOfWeek.split(',').map(d => parseInt(d.trim()));
+    return days.includes(dayOfWeek);
+  });
+  
+  // For each schedule, get its tags with location info
+  const schedulesWithTags = await Promise.all(filteredSchedules.map(async (schedule) => {
+    const tagRelations = await getScheduleTagRelations(schedule.id);
+    
+    let tags = tagRelations.map(r => ({
+      id: r.tagId,
+      uid: r.tagUid,
+      name: r.tagName,
+      latitude: r.tagLatitude,
+      longitude: r.tagLongitude,
+      radiusMeters: r.tagRadiusMeters,
+    }));
+    
+    // Fallback to legacy single tag
+    if (tags.length === 0 && schedule.tagId) {
+      const [legacyTag] = await db.select().from(nfcTags).where(eq(nfcTags.id, schedule.tagId)).limit(1);
+      if (legacyTag) {
+        tags = [{
+          id: legacyTag.id,
+          uid: legacyTag.uid,
+          name: legacyTag.name,
+          latitude: legacyTag.latitude,
+          longitude: legacyTag.longitude,
+          radiusMeters: legacyTag.radiusMeters,
+        }];
+      }
+    }
+    
+    return {
+      ...schedule,
+      tags,
+    };
+  }));
+  
+  return schedulesWithTags;
 }

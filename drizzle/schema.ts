@@ -205,3 +205,17 @@ export const userLocationUpdates = mysqlTable("user_location_updates", {
 
 export type UserLocationUpdate = typeof userLocationUpdates.$inferSelect;
 export type InsertUserLocationUpdate = typeof userLocationUpdates.$inferInsert;
+
+/**
+ * Schedule-Tag Relations - many-to-many relationship between schedules and tags
+ * Allows one schedule to apply to multiple tags
+ */
+export const scheduleTagRelations = mysqlTable("schedule_tag_relations", {
+  id: int("id").autoincrement().primaryKey(),
+  scheduleId: int("scheduleId").notNull(),
+  tagId: int("tagId").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ScheduleTagRelation = typeof scheduleTagRelations.$inferSelect;
+export type InsertScheduleTagRelation = typeof scheduleTagRelations.$inferInsert;
