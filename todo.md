@@ -60,3 +60,11 @@
 - [x] Sistema de check-in automático no meio do período
 - [x] Interface de gerenciamento de agendamentos no dashboard
 - [x] Histórico de check-ins automáticos
+
+## PWA com Background Sync
+- [x] Configurar manifest.json para PWA
+- [x] Criar service worker com Background Sync
+- [x] Implementar Periodic Background Sync para atualização de localização
+- [x] Criar página de instalação do PWA para usuários
+- [x] Página de atualização de localização com UI amigável
+- [x] Notificações push para lembrar usuário de ativar localização

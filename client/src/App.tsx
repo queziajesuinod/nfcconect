@@ -14,6 +14,7 @@ import NfcRegister from "./pages/NfcRegister";
 import LinkRedirect from "./pages/LinkRedirect";
 import Checkins from "./pages/Checkins";
 import Schedules from "./pages/Schedules";
+import UserApp from "./pages/UserApp";
 
 function Router() {
   return (
@@ -22,6 +23,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/nfc" component={NfcRegister} />
       <Route path="/l/:shortCode" component={LinkRedirect} />
+      <Route path="/app" component={UserApp} />
       
       {/* Dashboard Routes (Protected) */}
       <Route path="/dashboard" component={Dashboard} />
