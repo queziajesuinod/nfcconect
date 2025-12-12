@@ -167,3 +167,7 @@
 ## Indicador Visual de Tipo de Check-in
 - [x] Adicionar badge/ícone para diferenciar check-in manual (NFC) do automático
 - [x] Mostrar indicador no painel em tempo real
+
+## Resumo de Contagem por Tipo de Check-in
+- [x] Adicionar cards de resumo com contagem de check-ins NFC vs automáticos
+- [x] Exibir no topo do painel em tempo real

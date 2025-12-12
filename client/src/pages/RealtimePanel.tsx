@@ -103,6 +103,46 @@ function RealtimePanelContent() {
         </Card>
       )}
 
+      {/* Summary Cards - Check-in Types */}
+      {data?.allCheckins && data.allCheckins.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Card className="border-4 border-black">
+            <CardContent className="py-4 text-center">
+              <CheckCircle className="w-8 h-8 mx-auto mb-2 text-green-600" />
+              <div className="text-3xl font-black">{data.allCheckins.length}</div>
+              <div className="text-xs text-gray-500 uppercase font-bold">Total Hoje</div>
+            </CardContent>
+          </Card>
+          <Card className="border-4 border-blue-600">
+            <CardContent className="py-4 text-center">
+              <Smartphone className="w-8 h-8 mx-auto mb-2 text-blue-600" />
+              <div className="text-3xl font-black text-blue-600">
+                {data.allCheckins.filter(c => c.type === 'manual').length}
+              </div>
+              <div className="text-xs text-gray-500 uppercase font-bold">Via NFC</div>
+            </CardContent>
+          </Card>
+          <Card className="border-4 border-purple-600">
+            <CardContent className="py-4 text-center">
+              <Zap className="w-8 h-8 mx-auto mb-2 text-purple-600" />
+              <div className="text-3xl font-black text-purple-600">
+                {data.allCheckins.filter(c => c.type === 'auto').length}
+              </div>
+              <div className="text-xs text-gray-500 uppercase font-bold">Automático</div>
+            </CardContent>
+          </Card>
+          <Card className="border-4 border-green-600">
+            <CardContent className="py-4 text-center">
+              <MapPin className="w-8 h-8 mx-auto mb-2 text-green-600" />
+              <div className="text-3xl font-black text-green-600">
+                {data.allCheckins.filter(c => c.isWithinRadius).length}
+              </div>
+              <div className="text-xs text-gray-500 uppercase font-bold">Dentro do Raio</div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* No schedules today */}
       {todaySchedules.length === 0 && (
         <Card className="border-4 border-gray-300">
