@@ -50,6 +50,13 @@
       "when": 1765426037229,
       "tag": "0006_flashy_boom_boom",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1765604622565,
+      "tag": "0007_empty_christian_walker",
+      "breakpoints": true
     }
   ]
 }

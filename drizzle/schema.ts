@@ -219,3 +219,56 @@ export const scheduleTagRelations = mysqlTable("schedule_tag_relations", {
 
 export type ScheduleTagRelation = typeof scheduleTagRelations.$inferSelect;
 export type InsertScheduleTagRelation = typeof scheduleTagRelations.$inferInsert;
+
+
+/**
+ * Notification Groups - groups of users for targeted notifications and links
+ * Groups can be associated with schedules to automatically add users who check-in
+ */
+export const notificationGroups = mysqlTable("notification_groups", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  // Custom redirect URL for this group (overrides tag's default URL)
+  redirectUrl: text("redirectUrl"),
+  // Color for visual identification
+  color: varchar("color", { length: 7 }).default("#3B82F6").notNull(), // Hex color
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type NotificationGroup = typeof notificationGroups.$inferSelect;
+export type InsertNotificationGroup = typeof notificationGroups.$inferInsert;
+
+/**
+ * Group-Schedule Relations - links groups to schedules
+ * When a user checks in to a schedule, they are automatically added to linked groups
+ */
+export const groupScheduleRelations = mysqlTable("group_schedule_relations", {
+  id: int("id").autoincrement().primaryKey(),
+  groupId: int("groupId").notNull(),
+  scheduleId: int("scheduleId").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type GroupScheduleRelation = typeof groupScheduleRelations.$inferSelect;
+export type InsertGroupScheduleRelation = typeof groupScheduleRelations.$inferInsert;
+
+/**
+ * Group-User Relations - users that belong to a group
+ * Users are added automatically when they check-in to a linked schedule
+ */
+export const groupUserRelations = mysqlTable("group_user_relations", {
+  id: int("id").autoincrement().primaryKey(),
+  groupId: int("groupId").notNull(),
+  nfcUserId: int("nfcUserId").notNull(),
+  // How the user was added to the group
+  addedBy: mysqlEnum("addedBy", ["auto", "manual"]).default("auto").notNull(),
+  // Reference to the schedule that triggered auto-add (if applicable)
+  sourceScheduleId: int("sourceScheduleId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type GroupUserRelation = typeof groupUserRelations.$inferSelect;
+export type InsertGroupUserRelation = typeof groupUserRelations.$inferInsert;

@@ -11,7 +11,10 @@ import {
   checkinSchedules, InsertCheckinSchedule,
   automaticCheckins, InsertAutomaticCheckin,
   userLocationUpdates, InsertUserLocationUpdate,
-  scheduleTagRelations, InsertScheduleTagRelation
+  scheduleTagRelations, InsertScheduleTagRelation,
+  notificationGroups, InsertNotificationGroup, NotificationGroup,
+  groupScheduleRelations, InsertGroupScheduleRelation,
+  groupUserRelations, InsertGroupUserRelation
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -1305,4 +1308,272 @@ export async function getTodayCheckinsForActiveSchedules() {
     currentTime: `${String(campoGrandeNow.getHours()).padStart(2, '0')}:${String(campoGrandeNow.getMinutes()).padStart(2, '0')}`,
     currentDay,
   };
+}
+
+
+// ============ NOTIFICATION GROUPS FUNCTIONS ============
+
+// Create a new notification group
+export async function createNotificationGroup(data: InsertNotificationGroup) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.insert(notificationGroups).values(data);
+  return result[0].insertId;
+}
+
+// Get all notification groups
+export async function getAllNotificationGroups() {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(notificationGroups).orderBy(desc(notificationGroups.createdAt));
+}
+
+// Get notification group by ID
+export async function getNotificationGroupById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(notificationGroups).where(eq(notificationGroups.id, id));
+  return result[0] || null;
+}
+
+// Update notification group
+export async function updateNotificationGroup(id: number, data: Partial<InsertNotificationGroup>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(notificationGroups).set(data).where(eq(notificationGroups.id, id));
+}
+
+// Delete notification group
+export async function deleteNotificationGroup(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  // Delete related records first
+  await db.delete(groupScheduleRelations).where(eq(groupScheduleRelations.groupId, id));
+  await db.delete(groupUserRelations).where(eq(groupUserRelations.groupId, id));
+  await db.delete(notificationGroups).where(eq(notificationGroups.id, id));
+}
+
+// ============ GROUP-SCHEDULE RELATIONS ============
+
+// Link a schedule to a group
+export async function addScheduleToGroup(groupId: number, scheduleId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  // Check if relation already exists
+  const existing = await db.select()
+    .from(groupScheduleRelations)
+    .where(and(
+      eq(groupScheduleRelations.groupId, groupId),
+      eq(groupScheduleRelations.scheduleId, scheduleId)
+    ));
+  
+  if (existing.length > 0) return existing[0].id;
+  
+  const result = await db.insert(groupScheduleRelations).values({ groupId, scheduleId });
+  return result[0].insertId;
+}
+
+// Remove a schedule from a group
+export async function removeScheduleFromGroup(groupId: number, scheduleId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(groupScheduleRelations).where(
+    and(
+      eq(groupScheduleRelations.groupId, groupId),
+      eq(groupScheduleRelations.scheduleId, scheduleId)
+    )
+  );
+}
+
+// Get all schedules for a group
+export async function getGroupSchedules(groupId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const relations = await db.select({
+    scheduleId: groupScheduleRelations.scheduleId,
+    scheduleName: checkinSchedules.name,
+    scheduleDescription: checkinSchedules.description,
+    daysOfWeek: checkinSchedules.daysOfWeek,
+    startTime: checkinSchedules.startTime,
+    endTime: checkinSchedules.endTime,
+    isActive: checkinSchedules.isActive,
+  })
+    .from(groupScheduleRelations)
+    .leftJoin(checkinSchedules, eq(groupScheduleRelations.scheduleId, checkinSchedules.id))
+    .where(eq(groupScheduleRelations.groupId, groupId));
+  
+  return relations;
+}
+
+// Get groups linked to a schedule
+export async function getScheduleGroups(scheduleId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const relations = await db.select({
+    groupId: groupScheduleRelations.groupId,
+    groupName: notificationGroups.name,
+    groupColor: notificationGroups.color,
+  })
+    .from(groupScheduleRelations)
+    .leftJoin(notificationGroups, eq(groupScheduleRelations.groupId, notificationGroups.id))
+    .where(eq(groupScheduleRelations.scheduleId, scheduleId));
+  
+  return relations;
+}
+
+// ============ GROUP-USER RELATIONS ============
+
+// Add user to a group
+export async function addUserToGroup(groupId: number, nfcUserId: number, addedBy: 'auto' | 'manual' = 'manual', sourceScheduleId?: number) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  // Check if relation already exists
+  const existing = await db.select()
+    .from(groupUserRelations)
+    .where(and(
+      eq(groupUserRelations.groupId, groupId),
+      eq(groupUserRelations.nfcUserId, nfcUserId)
+    ));
+  
+  if (existing.length > 0) return existing[0].id;
+  
+  const result = await db.insert(groupUserRelations).values({ 
+    groupId, 
+    nfcUserId, 
+    addedBy,
+    sourceScheduleId: sourceScheduleId || null
+  });
+  return result[0].insertId;
+}
+
+// Remove user from a group
+export async function removeUserFromGroup(groupId: number, nfcUserId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(groupUserRelations).where(
+    and(
+      eq(groupUserRelations.groupId, groupId),
+      eq(groupUserRelations.nfcUserId, nfcUserId)
+    )
+  );
+}
+
+// Get all users in a group
+export async function getGroupUsers(groupId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const relations = await db.select({
+    id: groupUserRelations.id,
+    nfcUserId: groupUserRelations.nfcUserId,
+    addedBy: groupUserRelations.addedBy,
+    sourceScheduleId: groupUserRelations.sourceScheduleId,
+    createdAt: groupUserRelations.createdAt,
+    userName: nfcUsers.name,
+    userEmail: nfcUsers.email,
+    userPhone: nfcUsers.phone,
+  })
+    .from(groupUserRelations)
+    .leftJoin(nfcUsers, eq(groupUserRelations.nfcUserId, nfcUsers.id))
+    .where(eq(groupUserRelations.groupId, groupId))
+    .orderBy(desc(groupUserRelations.createdAt));
+  
+  return relations;
+}
+
+// Get groups a user belongs to
+export async function getUserGroups(nfcUserId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const relations = await db.select({
+    groupId: groupUserRelations.groupId,
+    groupName: notificationGroups.name,
+    groupColor: notificationGroups.color,
+    redirectUrl: notificationGroups.redirectUrl,
+    addedBy: groupUserRelations.addedBy,
+  })
+    .from(groupUserRelations)
+    .leftJoin(notificationGroups, eq(groupUserRelations.groupId, notificationGroups.id))
+    .where(eq(groupUserRelations.nfcUserId, nfcUserId));
+  
+  return relations;
+}
+
+// Get group count stats
+export async function getGroupStats(groupId: number) {
+  const db = await getDb();
+  if (!db) return { totalUsers: 0, totalSchedules: 0 };
+  
+  const userCount = await db.select({ count: sql<number>`count(*)` })
+    .from(groupUserRelations)
+    .where(eq(groupUserRelations.groupId, groupId));
+  
+  const scheduleCount = await db.select({ count: sql<number>`count(*)` })
+    .from(groupScheduleRelations)
+    .where(eq(groupScheduleRelations.groupId, groupId));
+  
+  return {
+    totalUsers: userCount[0]?.count || 0,
+    totalSchedules: scheduleCount[0]?.count || 0,
+  };
+}
+
+// Get all groups with stats
+export async function getAllGroupsWithStats() {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const groups = await getAllNotificationGroups();
+  
+  const groupsWithStats = await Promise.all(groups.map(async (group) => {
+    const stats = await getGroupStats(group.id);
+    return {
+      ...group,
+      ...stats,
+    };
+  }));
+  
+  return groupsWithStats;
+}
+
+// Auto-add user to groups linked to a schedule (called on check-in)
+export async function autoAddUserToScheduleGroups(nfcUserId: number, scheduleId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  // Get all groups linked to this schedule
+  const groups = await getScheduleGroups(scheduleId);
+  
+  const addedGroups: number[] = [];
+  
+  for (const group of groups) {
+    if (group.groupId) {
+      await addUserToGroup(group.groupId, nfcUserId, 'auto', scheduleId);
+      addedGroups.push(group.groupId);
+    }
+  }
+  
+  return addedGroups;
+}
+
+// Get redirect URL for user based on their groups (returns first group with URL)
+export async function getGroupRedirectUrlForUser(nfcUserId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const userGroups = await getUserGroups(nfcUserId);
+  
+  // Find first group with a redirect URL
+  for (const group of userGroups) {
+    if (group.redirectUrl) {
+      return group.redirectUrl;
+    }
+  }
+  
+  return null;
 }

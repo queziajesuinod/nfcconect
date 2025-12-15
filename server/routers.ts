@@ -18,7 +18,11 @@ import {
   createUserLocationUpdate, getLatestUserLocation, getUsersWithRecentLocation, getUsersByTagIdWithRecentLocation,
   getScheduleTagRelations, addScheduleTagRelation, removeScheduleTagRelation, setScheduleTagRelations, getAllCheckinSchedulesWithTags, getActiveSchedulesForDayWithTags,
   getAllUnifiedCheckins, hasUserCheckinForTagToday, getActiveScheduleForTag, getUnifiedCheckinStats,
-  getTodayCheckinsForActiveSchedules
+  getTodayCheckinsForActiveSchedules,
+  createNotificationGroup, getAllNotificationGroups, getNotificationGroupById, updateNotificationGroup, deleteNotificationGroup,
+  addScheduleToGroup, removeScheduleFromGroup, getGroupSchedules, getScheduleGroups,
+  addUserToGroup, removeUserFromGroup, getGroupUsers, getUserGroups, getGroupStats, getAllGroupsWithStats,
+  autoAddUserToScheduleGroups, getGroupRedirectUrlForUser
 } from "./db";
 
 // Helper function to get current date/time in Campo Grande MS timezone (UTC-4)
@@ -1013,6 +1017,99 @@ export const appRouter = router({
       const checkinStats = await getCheckinStats();
       return { ...baseStats, ...checkinStats };
     }),
+  }),
+
+  groups: router({
+    list: adminProcedure.query(async () => {
+      return getAllGroupsWithStats();
+    }),
+
+    byId: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        const group = await getNotificationGroupById(input.id);
+        if (!group) throw new TRPCError({ code: 'NOT_FOUND', message: 'Grupo nao encontrado' });
+        const stats = await getGroupStats(input.id);
+        const users = await getGroupUsers(input.id);
+        const schedules = await getGroupSchedules(input.id);
+        return { ...group, ...stats, users, schedules };
+      }),
+
+    create: adminProcedure
+      .input(z.object({
+        name: z.string().min(1),
+        description: z.string().optional(),
+        redirectUrl: z.string().optional(),
+        color: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const id = await createNotificationGroup({
+          name: input.name,
+          description: input.description || null,
+          redirectUrl: input.redirectUrl || null,
+          color: input.color || '#3B82F6',
+          isActive: true,
+        });
+        return { id, success: true };
+      }),
+
+    update: adminProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().optional(),
+        description: z.string().optional(),
+        redirectUrl: z.string().optional(),
+        color: z.string().optional(),
+        isActive: z.boolean().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        await updateNotificationGroup(id, data);
+        return { success: true };
+      }),
+
+    delete: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await deleteNotificationGroup(input.id);
+        return { success: true };
+      }),
+
+    addSchedule: adminProcedure
+      .input(z.object({ groupId: z.number(), scheduleId: z.number() }))
+      .mutation(async ({ input }) => {
+        await addScheduleToGroup(input.groupId, input.scheduleId);
+        return { success: true };
+      }),
+
+    removeSchedule: adminProcedure
+      .input(z.object({ groupId: z.number(), scheduleId: z.number() }))
+      .mutation(async ({ input }) => {
+        await removeScheduleFromGroup(input.groupId, input.scheduleId);
+        return { success: true };
+      }),
+
+    addUser: adminProcedure
+      .input(z.object({ groupId: z.number(), nfcUserId: z.number() }))
+      .mutation(async ({ input }) => {
+        await addUserToGroup(input.groupId, input.nfcUserId, 'manual');
+        return { success: true };
+      }),
+
+    removeUser: adminProcedure
+      .input(z.object({ groupId: z.number(), nfcUserId: z.number() }))
+      .mutation(async ({ input }) => {
+        await removeUserFromGroup(input.groupId, input.nfcUserId);
+        return { success: true };
+      }),
+
+    getUserGroups: publicProcedure
+      .input(z.object({ deviceId: z.string() }))
+      .query(async ({ input }) => {
+        const user = await getNfcUserByDeviceId(input.deviceId);
+        if (!user) return [];
+        return getUserGroups(user.id);
+      }),
   }),
 });
 

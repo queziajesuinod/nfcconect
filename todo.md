@@ -171,3 +171,12 @@
 ## Resumo de Contagem por Tipo de Check-in
 - [x] Adicionar cards de resumo com contagem de check-ins NFC vs automáticos
 - [x] Exibir no topo do painel em tempo real
+
+## Sistema de Grupos de Notificação
+- [x] Criar tabela de grupos (nome, descrição, link de redirecionamento)
+- [x] Criar relação grupo-agendamento (um grupo pode ter múltiplos agendamentos)
+- [x] Criar relação grupo-usuário (usuários associados ao grupo)
+- [ ] Associar usuário automaticamente ao grupo quando faz check-in em agendamento vinculado
+- [x] Página de gerenciamento de grupos no dashboard
+- [x] Configurar link dinâmico por grupo
+- [ ] Listar usuários de cada grupo

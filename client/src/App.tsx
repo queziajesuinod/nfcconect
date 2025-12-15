@@ -16,6 +16,7 @@ import Checkins from "./pages/Checkins";
 import Schedules from "./pages/Schedules";
 import UserApp from "./pages/UserApp";
 import RealtimePanel from "./pages/RealtimePanel";
+import Groups from "./pages/Groups";
 
 function Router() {
   return (
@@ -35,6 +36,7 @@ function Router() {
       <Route path="/dashboard/checkins" component={Checkins} />
       <Route path="/dashboard/schedules" component={Schedules} />
       <Route path="/dashboard/realtime" component={RealtimePanel} />
+      <Route path="/dashboard/groups" component={Groups} />
       
       {/* Fallback */}
       <Route path="/404" component={NotFound} />
