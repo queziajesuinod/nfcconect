@@ -661,6 +661,14 @@ export const appRouter = router({
           status: 'completed',
         });
         
+        // Auto-associate user to groups linked to this schedule
+        try {
+          await autoAddUserToScheduleGroups(input.nfcUserId, schedule.id);
+        } catch (error) {
+          console.warn('Erro ao associar usuario aos grupos:', error);
+          // Don't fail the check-in if group association fails
+        }
+        
         return {
           success: true,
           checkinId: result.id,
@@ -930,6 +938,14 @@ export const appRouter = router({
               status: isWithinRadius ? 'completed' : 'failed',
               errorMessage: isWithinRadius ? null : `Usuário fora do raio (${distance}m > ${tag.radiusMeters}m)`,
             });
+
+            // Auto-associate user to groups linked to this schedule
+            try {
+              await autoAddUserToScheduleGroups(user.id, schedule.id);
+            } catch (error) {
+              console.warn(`Erro ao associar usuario ${user.id} aos grupos:`, error);
+              // Don't fail the check-in if group association fails
+            }
 
             results.push({
               userId: user.id,

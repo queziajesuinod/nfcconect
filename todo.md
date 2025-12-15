@@ -180,3 +180,7 @@
 - [x] Página de gerenciamento de grupos no dashboard
 - [x] Configurar link dinâmico por grupo
 - [ ] Listar usuários de cada grupo
+
+## Auto-associação de Usuários aos Grupos
+- [x] Adicionar auto-associação no check-in manual
+- [x] Adicionar auto-associação no check-in automático
