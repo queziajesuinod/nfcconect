@@ -1126,6 +1126,54 @@ export const appRouter = router({
         if (!user) return [];
         return getUserGroups(user.id);
       }),
+
+    bulkRemoveUsers: adminProcedure
+      .input(z.object({ groupId: z.number(), userIds: z.array(z.number()) }))
+      .mutation(async ({ input }) => {
+        for (const userId of input.userIds) {
+          await removeUserFromGroup(input.groupId, userId);
+        }
+        return { success: true, removedCount: input.userIds.length };
+      }),
+
+    bulkAddSchedules: adminProcedure
+      .input(z.object({ groupId: z.number(), scheduleIds: z.array(z.number()) }))
+      .mutation(async ({ input }) => {
+        for (const scheduleId of input.scheduleIds) {
+          await addScheduleToGroup(input.groupId, scheduleId);
+        }
+        return { success: true, addedCount: input.scheduleIds.length };
+      }),
+
+    bulkRemoveSchedules: adminProcedure
+      .input(z.object({ groupId: z.number(), scheduleIds: z.array(z.number()) }))
+      .mutation(async ({ input }) => {
+        for (const scheduleId of input.scheduleIds) {
+          await removeScheduleFromGroup(input.groupId, scheduleId);
+        }
+        return { success: true, removedCount: input.scheduleIds.length };
+      }),
+
+    getUsers: adminProcedure
+      .input(z.object({ groupId: z.number() }))
+      .query(async ({ input }) => {
+        return getGroupUsers(input.groupId);
+      }),
+
+    getSchedules: adminProcedure
+      .input(z.object({ groupId: z.number() }))
+      .query(async ({ input }) => {
+        return getGroupSchedules(input.groupId);
+      }),
+
+    getAvailableSchedules: adminProcedure
+      .input(z.object({ groupId: z.number() }))
+      .query(async ({ input }) => {
+        const allSchedules = await getAllCheckinSchedulesWithTags();
+        const groupSchedules = await getGroupSchedules(input.groupId);
+        const groupScheduleIds = groupSchedules.map(s => s.scheduleId);
+        return allSchedules.filter(s => !groupScheduleIds.includes(s.id));
+      }),
   }),
 });
 

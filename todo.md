@@ -172,15 +172,23 @@
 - [x] Adicionar cards de resumo com contagem de check-ins NFC vs automáticos
 - [x] Exibir no topo do painel em tempo real
 
-## Sistema de Grupos de Notificação
-- [x] Criar tabela de grupos (nome, descrição, link de redirecionamento)
-- [x] Criar relação grupo-agendamento (um grupo pode ter múltiplos agendamentos)
-- [x] Criar relação grupo-usuário (usuários associados ao grupo)
-- [ ] Associar usuário automaticamente ao grupo quando faz check-in em agendamento vinculado
-- [x] Página de gerenciamento de grupos no dashboard
-- [x] Configurar link dinâmico por grupo
-- [ ] Listar usuários de cada grupo
+## Sistema de Grupos de Notificacao
+- [x] Criar tabela de grupos (nome, descricao, link de redirecionamento)
+- [x] Criar relacao grupo-agendamento (um grupo pode ter multiplos agendamentos)
+- [x] Criar relacao grupo-usuario (usuarios associados ao grupo)
+- [x] Associar usuario automaticamente ao grupo quando faz check-in em agendamento vinculado
+- [x] Pagina de gerenciamento de grupos no dashboard
+- [x] Configurar link dinamico por grupo
+- [x] Listar usuarios de cada grupo
 
 ## Auto-associação de Usuários aos Grupos
 - [x] Adicionar auto-associação no check-in manual
 - [x] Adicionar auto-associação no check-in automático
+
+## Pagina de Detalhes do Grupo
+- [x] Criar pagina de detalhes com visualizacao de usuarios e agendamentos
+- [x] Implementar bulk actions para remover multiplos usuarios
+- [x] Implementar bulk actions para adicionar/remover agendamentos
+- [x] Adicionar filtros e busca de usuarios
+- [x] Adicionar link na pagina de grupos para acessar detalhes
+- [x] Adicionar endpoints tRPC getUsers e getSchedules
