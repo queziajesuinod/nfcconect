@@ -1,5 +1,6 @@
 import { eq, desc, sql, and, gte, lte, or, inArray } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 import { 
   InsertUser, users, 
   nfcTags, InsertNfcTag, NfcTag,
@@ -19,14 +20,17 @@ import {
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
+let _client: ReturnType<typeof postgres> | null = null;
 
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      _client = postgres(process.env.DATABASE_URL);
+      _db = drizzle(_client);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
+      _client = null;
     }
   }
   return _db;
@@ -84,9 +88,14 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       updateSet.lastSignedIn = new Date();
     }
 
-    await db.insert(users).values(values).onDuplicateKeyUpdate({
-      set: updateSet,
-    });
+    // PostgreSQL upsert using ON CONFLICT
+    await db
+      .insert(users)
+      .values(values)
+      .onConflictDoUpdate({
+        target: users.openId,
+        set: updateSet,
+      });
   } catch (error) {
     console.error("[Database] Failed to upsert user:", error);
     throw error;
@@ -110,8 +119,8 @@ export async function createNfcTag(tag: InsertNfcTag) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
-  const result = await db.insert(nfcTags).values(tag);
-  return { id: result[0].insertId };
+  const result = await db.insert(nfcTags).values(tag).returning({ id: nfcTags.id });
+  return { id: result[0].id };
 }
 
 export async function getNfcTagByUid(uid: string) {
@@ -157,8 +166,8 @@ export async function createNfcUser(user: InsertNfcUser) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
-  const result = await db.insert(nfcUsers).values(user);
-  return { id: result[0].insertId };
+  const result = await db.insert(nfcUsers).values(user).returning({ id: nfcUsers.id });
+  return { id: result[0].id };
 }
 
 // Get user by deviceId (unique identifier)
@@ -182,12 +191,12 @@ export async function getUserTagRelation(userId: number, tagId: number) {
 }
 
 // Create user-tag relationship
-export async function createUserTagRelation(data: InsertUserTagRelation) {
+export async function createUserTagRelation(userId: number, tagId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
-  const result = await db.insert(userTagRelations).values(data);
-  return { id: result[0].insertId };
+  const result = await db.insert(userTagRelations).values({ userId, tagId }).returning({ id: userTagRelations.id });
+  return { id: result[0].id };
 }
 
 // Update user-tag relationship (last connection)
@@ -304,8 +313,8 @@ export async function createConnectionLog(log: InsertConnectionLog) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
-  const result = await db.insert(connectionLogs).values(log);
-  return { id: result[0].insertId };
+  const result = await db.insert(connectionLogs).values(log).returning({ id: connectionLogs.id });
+  return { id: result[0].id };
 }
 
 export async function getConnectionLogs(limit = 100) {
@@ -339,8 +348,8 @@ export async function createDynamicLink(link: InsertDynamicLink) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
-  const result = await db.insert(dynamicLinks).values(link);
-  return { id: result[0].insertId };
+  const result = await db.insert(dynamicLinks).values(link).returning({ id: dynamicLinks.id });
+  return { id: result[0].id };
 }
 
 export async function getDynamicLinkByShortCode(shortCode: string) {
@@ -398,8 +407,8 @@ export async function createCheckin(checkin: InsertCheckin) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
-  const result = await db.insert(checkins).values(checkin);
-  return { id: result[0].insertId };
+  const result = await db.insert(checkins).values(checkin).returning({ id: checkins.id });
+  return { id: result[0].id };
 }
 
 export async function getCheckinsByTagId(tagId: number, limit = 100) {
@@ -505,8 +514,8 @@ export async function createCheckinSchedule(schedule: InsertCheckinSchedule) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
-  const result = await db.insert(checkinSchedules).values(schedule);
-  return { id: result[0].insertId };
+  const result = await db.insert(checkinSchedules).values(schedule).returning({ id: checkinSchedules.id });
+  return { id: result[0].id };
 }
 
 export async function getCheckinScheduleById(id: number) {
@@ -603,8 +612,8 @@ export async function createAutomaticCheckin(checkin: InsertAutomaticCheckin) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
-  const result = await db.insert(automaticCheckins).values(checkin);
-  return { id: result[0].insertId };
+  const result = await db.insert(automaticCheckins).values(checkin).returning({ id: automaticCheckins.id });
+  return { id: result[0].id };
 }
 
 export async function getAllAutomaticCheckins(limit = 100) {
@@ -673,8 +682,8 @@ export async function createUserLocationUpdate(update: InsertUserLocationUpdate)
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
-  const result = await db.insert(userLocationUpdates).values(update);
-  return { id: result[0].insertId };
+  const result = await db.insert(userLocationUpdates).values(update).returning({ id: userLocationUpdates.id });
+  return { id: result[0].id };
 }
 
 export async function getLatestUserLocation(nfcUserId: number) {
@@ -821,8 +830,8 @@ export async function addScheduleTagRelation(scheduleId: number, tagId: number) 
   
   if (existing.length > 0) return { id: existing[0].id };
   
-  const result = await db.insert(scheduleTagRelations).values({ scheduleId, tagId });
-  return { id: result[0].insertId };
+  const result = await db.insert(scheduleTagRelations).values({ scheduleId, tagId }).returning({ id: scheduleTagRelations.id });
+  return { id: result[0].id };
 }
 
 export async function removeScheduleTagRelation(scheduleId: number, tagId: number) {
@@ -1316,9 +1325,10 @@ export async function getTodayCheckinsForActiveSchedules() {
 // Create a new notification group
 export async function createNotificationGroup(data: InsertNotificationGroup) {
   const db = await getDb();
-  if (!db) return null;
-  const result = await db.insert(notificationGroups).values(data);
-  return result[0].insertId;
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(notificationGroups).values(data).returning({ id: notificationGroups.id });
+  return result[0].id;
 }
 
 // Get all notification groups
@@ -1370,8 +1380,8 @@ export async function addScheduleToGroup(groupId: number, scheduleId: number) {
   
   if (existing.length > 0) return existing[0].id;
   
-  const result = await db.insert(groupScheduleRelations).values({ groupId, scheduleId });
-  return result[0].insertId;
+  const result = await db.insert(groupScheduleRelations).values({ groupId, scheduleId }).returning({ id: groupScheduleRelations.id });
+  return result[0].id;
 }
 
 // Remove a schedule from a group
@@ -1441,13 +1451,8 @@ export async function addUserToGroup(groupId: number, nfcUserId: number, addedBy
   
   if (existing.length > 0) return existing[0].id;
   
-  const result = await db.insert(groupUserRelations).values({ 
-    groupId, 
-    nfcUserId, 
-    addedBy,
-    sourceScheduleId: sourceScheduleId || null
-  });
-  return result[0].insertId;
+  const result = await db.insert(groupUserRelations).values({ groupId, nfcUserId, addedBy, sourceScheduleId }).returning({ id: groupUserRelations.id });
+  return result[0].id;
 }
 
 // Remove user from a group

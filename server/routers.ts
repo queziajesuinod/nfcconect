@@ -199,10 +199,7 @@ export const appRouter = router({
             };
           } else {
             // User exists but not connected to this tag - create relation automatically
-            await createUserTagRelation({
-              userId: existingUser.id,
-              tagId: tag.id,
-            });
+            await createUserTagRelation(existingUser.id, tag.id);
             await updateNfcUser(existingUser.id, { lastConnectionAt: new Date() });
             await createConnectionLog({
               tagId: tag.id,
@@ -282,10 +279,7 @@ export const appRouter = router({
             };
           } else {
             // User exists but not connected to this tag - create new relation
-            await createUserTagRelation({
-              userId: existingUser.id,
-              tagId: tag.id,
-            });
+            await createUserTagRelation(existingUser.id, tag.id);
             await updateNfcUser(existingUser.id, { lastConnectionAt: new Date() });
             await createConnectionLog({
               tagId: tag.id,
@@ -319,10 +313,7 @@ export const appRouter = router({
         });
 
         // Create user-tag relationship
-        await createUserTagRelation({
-          userId: result.id,
-          tagId: tag.id,
-        });
+        await createUserTagRelation(result.id, tag.id);
 
         // Log first connection with location
         await createConnectionLog({

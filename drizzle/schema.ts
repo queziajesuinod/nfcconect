@@ -1,17 +1,17 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean, decimal } from "drizzle-orm/mysql-core";
+import { pgTable, pgEnum, serial, varchar, text, boolean, timestamp, integer } from "drizzle-orm/pg-core";
 
 /**
  * Core user table backing auth flow (admin users).
  */
-export const users = mysqlTable("users", {
-  id: int("id").autoincrement().primaryKey(),
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
   openId: varchar("openId", { length: 64 }).notNull().unique(),
   name: text("name"),
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
-  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  role: pgEnum("role", ["user", "admin"])("role").default("user").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
 });
 
@@ -21,20 +21,20 @@ export type InsertUser = typeof users.$inferInsert;
 /**
  * NFC Tags - stores information about physical NFC tags
  */
-export const nfcTags = mysqlTable("nfc_tags", {
-  id: int("id").autoincrement().primaryKey(),
+export const nfcTags = pgTable("nfc_tags", {
+  id: serial("id").primaryKey(),
   uid: varchar("uid", { length: 64 }).notNull().unique(),
   name: varchar("name", { length: 255 }),
   description: text("description"),
-  status: mysqlEnum("status", ["active", "inactive", "blocked"]).default("active").notNull(),
+  status: pgEnum("nfc_status", ["active", "inactive", "blocked"])("status").default("active").notNull(),
   redirectUrl: text("redirectUrl"),
   // Geolocation fields
   latitude: varchar("latitude", { length: 32 }),
   longitude: varchar("longitude", { length: 32 }),
-  radiusMeters: int("radiusMeters").default(100), // Default 100 meters radius
+  radiusMeters: integer("radiusMeters").default(100), // Default 100 meters radius
   enableCheckin: boolean("enableCheckin").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 export type NfcTag = typeof nfcTags.$inferSelect;
@@ -44,8 +44,8 @@ export type InsertNfcTag = typeof nfcTags.$inferInsert;
  * NFC Users - users registered through NFC tag first connection
  * Now identified by deviceId (unique per device), can connect to multiple tags
  */
-export const nfcUsers = mysqlTable("nfc_users", {
-  id: int("id").autoincrement().primaryKey(),
+export const nfcUsers = pgTable("nfc_users", {
+  id: serial("id").primaryKey(),
   deviceId: varchar("deviceId", { length: 64 }).notNull().unique(), // Unique device identifier - now the main identifier
   name: varchar("name", { length: 255 }),
   email: varchar("email", { length: 320 }),
@@ -60,7 +60,7 @@ export const nfcUsers = mysqlTable("nfc_users", {
   firstConnectionAt: timestamp("firstConnectionAt").defaultNow().notNull(),
   lastConnectionAt: timestamp("lastConnectionAt").defaultNow().notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 export type NfcUser = typeof nfcUsers.$inferSelect;
@@ -69,10 +69,10 @@ export type InsertNfcUser = typeof nfcUsers.$inferInsert;
 /**
  * User-Tag Relationships - many-to-many relationship between users and tags
  */
-export const userTagRelations = mysqlTable("user_tag_relations", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  tagId: int("tagId").notNull(),
+export const userTagRelations = pgTable("user_tag_relations", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  tagId: integer("tagId").notNull(),
   firstConnectionAt: timestamp("firstConnectionAt").defaultNow().notNull(),
   lastConnectionAt: timestamp("lastConnectionAt").defaultNow().notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -84,11 +84,11 @@ export type InsertUserTagRelation = typeof userTagRelations.$inferInsert;
 /**
  * Connection Logs - tracks all NFC tag interactions
  */
-export const connectionLogs = mysqlTable("connection_logs", {
-  id: int("id").autoincrement().primaryKey(),
-  tagId: int("tagId").notNull(),
-  nfcUserId: int("nfcUserId"),
-  action: mysqlEnum("action", ["first_read", "validation", "redirect", "update", "block", "checkin"]).notNull(),
+export const connectionLogs = pgTable("connection_logs", {
+  id: serial("id").primaryKey(),
+  tagId: integer("tagId").notNull(),
+  nfcUserId: integer("nfcUserId"),
+  action: pgEnum("action", ["first_read", "validation", "redirect", "update", "block", "checkin"])("action").notNull(),
   ipAddress: varchar("ipAddress", { length: 64 }),
   userAgent: text("userAgent"),
   // Geolocation at time of action
@@ -104,13 +104,13 @@ export type InsertConnectionLog = typeof connectionLogs.$inferInsert;
 /**
  * Check-ins - records of users checking in at NFC tag locations
  */
-export const checkins = mysqlTable("checkins", {
-  id: int("id").autoincrement().primaryKey(),
-  tagId: int("tagId").notNull(),
-  nfcUserId: int("nfcUserId").notNull(),
+export const checkins = pgTable("checkins", {
+  id: serial("id").primaryKey(),
+  tagId: integer("tagId").notNull(),
+  nfcUserId: integer("nfcUserId").notNull(),
   latitude: varchar("latitude", { length: 32 }).notNull(),
   longitude: varchar("longitude", { length: 32 }).notNull(),
-  distanceMeters: int("distanceMeters"), // Distance from tag location
+  distanceMeters: integer("distanceMeters"), // Distance from tag location
   isWithinRadius: boolean("isWithinRadius").default(false).notNull(),
   deviceInfo: text("deviceInfo"),
   ipAddress: varchar("ipAddress", { length: 64 }),
@@ -123,17 +123,17 @@ export type InsertCheckin = typeof checkins.$inferInsert;
 /**
  * Dynamic Links - personalized URLs for each user
  */
-export const dynamicLinks = mysqlTable("dynamic_links", {
-  id: int("id").autoincrement().primaryKey(),
-  nfcUserId: int("nfcUserId").notNull(),
+export const dynamicLinks = pgTable("dynamic_links", {
+  id: serial("id").primaryKey(),
+  nfcUserId: integer("nfcUserId").notNull(),
   shortCode: varchar("shortCode", { length: 32 }).notNull().unique(),
   targetUrl: text("targetUrl").notNull(),
   title: varchar("title", { length: 255 }),
   isActive: boolean("isActive").default(true).notNull(),
-  clickCount: int("clickCount").default(0).notNull(),
+  clickCount: integer("clickCount").default(0).notNull(),
   expiresAt: timestamp("expiresAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 export type DynamicLink = typeof dynamicLinks.$inferSelect;
@@ -144,9 +144,9 @@ export type InsertDynamicLink = typeof dynamicLinks.$inferInsert;
  * Check-in Schedules - defines automatic check-in periods for tags
  * Allows setting specific days and time ranges for automatic check-in
  */
-export const checkinSchedules = mysqlTable("checkin_schedules", {
-  id: int("id").autoincrement().primaryKey(),
-  tagId: int("tagId").notNull(),
+export const checkinSchedules = pgTable("checkin_schedules", {
+  id: serial("id").primaryKey(),
+  tagId: integer("tagId").notNull(),
   name: varchar("name", { length: 255 }),
   description: text("description"),
   // Days of week (0=Sunday, 1=Monday, ..., 6=Saturday) stored as comma-separated string
@@ -157,7 +157,7 @@ export const checkinSchedules = mysqlTable("checkin_schedules", {
   // Timezone for the schedule
   timezone: varchar("timezone", { length: 64 }).default("America/Sao_Paulo").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 export type CheckinSchedule = typeof checkinSchedules.$inferSelect;
@@ -166,22 +166,22 @@ export type InsertCheckinSchedule = typeof checkinSchedules.$inferInsert;
 /**
  * Automatic Check-ins - records of check-ins performed automatically by the system
  */
-export const automaticCheckins = mysqlTable("automatic_checkins", {
-  id: int("id").autoincrement().primaryKey(),
-  scheduleId: int("scheduleId").notNull(),
-  tagId: int("tagId").notNull(),
-  nfcUserId: int("nfcUserId").notNull(),
+export const automaticCheckins = pgTable("automatic_checkins", {
+  id: serial("id").primaryKey(),
+  scheduleId: integer("scheduleId").notNull(),
+  tagId: integer("tagId").notNull(),
+  nfcUserId: integer("nfcUserId").notNull(),
   // User's location at the time of automatic check-in
   userLatitude: varchar("userLatitude", { length: 32 }),
   userLongitude: varchar("userLongitude", { length: 32 }),
-  distanceMeters: int("distanceMeters"),
+  distanceMeters: integer("distanceMeters"),
   isWithinRadius: boolean("isWithinRadius").default(false).notNull(),
   // Schedule period info
   scheduledDate: timestamp("scheduledDate").notNull(), // The date this check-in was scheduled for
   periodStart: varchar("periodStart", { length: 8 }).notNull(), // "08:00"
   periodEnd: varchar("periodEnd", { length: 8 }).notNull(), // "10:00"
   checkinTime: timestamp("checkinTime").notNull(), // Actual time of check-in (middle of period)
-  status: mysqlEnum("status", ["pending", "completed", "failed", "missed"]).default("pending").notNull(),
+  status: pgEnum("checkin_status", ["pending", "completed", "failed", "missed"])("status").default("pending").notNull(),
   errorMessage: text("errorMessage"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
@@ -193,12 +193,12 @@ export type InsertAutomaticCheckin = typeof automaticCheckins.$inferInsert;
  * User Location Updates - tracks user locations for automatic check-in verification
  * Users can update their location periodically for the system to verify proximity
  */
-export const userLocationUpdates = mysqlTable("user_location_updates", {
-  id: int("id").autoincrement().primaryKey(),
-  nfcUserId: int("nfcUserId").notNull(),
+export const userLocationUpdates = pgTable("user_location_updates", {
+  id: serial("id").primaryKey(),
+  nfcUserId: integer("nfcUserId").notNull(),
   latitude: varchar("latitude", { length: 32 }).notNull(),
   longitude: varchar("longitude", { length: 32 }).notNull(),
-  accuracy: int("accuracy"), // GPS accuracy in meters
+  accuracy: integer("accuracy"), // GPS accuracy in meters
   deviceInfo: text("deviceInfo"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
@@ -210,10 +210,10 @@ export type InsertUserLocationUpdate = typeof userLocationUpdates.$inferInsert;
  * Schedule-Tag Relations - many-to-many relationship between schedules and tags
  * Allows one schedule to apply to multiple tags
  */
-export const scheduleTagRelations = mysqlTable("schedule_tag_relations", {
-  id: int("id").autoincrement().primaryKey(),
-  scheduleId: int("scheduleId").notNull(),
-  tagId: int("tagId").notNull(),
+export const scheduleTagRelations = pgTable("schedule_tag_relations", {
+  id: serial("id").primaryKey(),
+  scheduleId: integer("scheduleId").notNull(),
+  tagId: integer("tagId").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
@@ -225,8 +225,8 @@ export type InsertScheduleTagRelation = typeof scheduleTagRelations.$inferInsert
  * Notification Groups - groups of users for targeted notifications and links
  * Groups can be associated with schedules to automatically add users who check-in
  */
-export const notificationGroups = mysqlTable("notification_groups", {
-  id: int("id").autoincrement().primaryKey(),
+export const notificationGroups = pgTable("notification_groups", {
+  id: serial("id").primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"),
   // Custom redirect URL for this group (overrides tag's default URL)
@@ -235,7 +235,7 @@ export const notificationGroups = mysqlTable("notification_groups", {
   color: varchar("color", { length: 7 }).default("#3B82F6").notNull(), // Hex color
   isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 export type NotificationGroup = typeof notificationGroups.$inferSelect;
@@ -245,10 +245,10 @@ export type InsertNotificationGroup = typeof notificationGroups.$inferInsert;
  * Group-Schedule Relations - links groups to schedules
  * When a user checks in to a schedule, they are automatically added to linked groups
  */
-export const groupScheduleRelations = mysqlTable("group_schedule_relations", {
-  id: int("id").autoincrement().primaryKey(),
-  groupId: int("groupId").notNull(),
-  scheduleId: int("scheduleId").notNull(),
+export const groupScheduleRelations = pgTable("group_schedule_relations", {
+  id: serial("id").primaryKey(),
+  groupId: integer("groupId").notNull(),
+  scheduleId: integer("scheduleId").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
@@ -259,14 +259,14 @@ export type InsertGroupScheduleRelation = typeof groupScheduleRelations.$inferIn
  * Group-User Relations - users that belong to a group
  * Users are added automatically when they check-in to a linked schedule
  */
-export const groupUserRelations = mysqlTable("group_user_relations", {
-  id: int("id").autoincrement().primaryKey(),
-  groupId: int("groupId").notNull(),
-  nfcUserId: int("nfcUserId").notNull(),
+export const groupUserRelations = pgTable("group_user_relations", {
+  id: serial("id").primaryKey(),
+  groupId: integer("groupId").notNull(),
+  nfcUserId: integer("nfcUserId").notNull(),
   // How the user was added to the group
-  addedBy: mysqlEnum("addedBy", ["auto", "manual"]).default("auto").notNull(),
+  addedBy: pgEnum("added_by", ["auto", "manual"])("addedBy").default("auto").notNull(),
   // Reference to the schedule that triggered auto-add (if applicable)
-  sourceScheduleId: int("sourceScheduleId"),
+  sourceScheduleId: integer("sourceScheduleId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 

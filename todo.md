@@ -78,14 +78,15 @@
 - [x] Evitar check-ins duplicados no mesmo período de agendamento
 - [x] Redirecionar para URL da tag após primeiro cadastro
 
-## Deploy Externo (Docker/Portainer/Traefik) - ADIADO
-- [ ] Converter Drizzle ORM de MySQL para PostgreSQL
-- [ ] Atualizar schema.ts para sintaxe PostgreSQL
-- [ ] Atualizar db.ts para driver PostgreSQL
-- [ ] Criar Dockerfile para produção
+## Deploy Externo (Docker/Portainer/Traefik)
+- [x] Converter Drizzle ORM de MySQL para PostgreSQL
+- [x] Atualizar schema.ts para sintaxe PostgreSQL
+- [x] Atualizar db.ts para driver PostgreSQL
+- [x] Criar arquivo .env.example (via webdev_request_secrets)
+- [x] Documentacao de deploy (DEPLOY_GUIDE.md)
+- [x] Documentacao PostgreSQL (POSTGRESQL_SETUP.md)
+- [ ] Criar Dockerfile para producao
 - [ ] Criar docker-compose.yml com Traefik
-- [ ] Criar arquivo .env.example
-- [ ] Documentação de deploy
 
 ## Múltiplos Usuários por Tag
 - [x] Adicionar campo deviceId no schema de nfcUsers
