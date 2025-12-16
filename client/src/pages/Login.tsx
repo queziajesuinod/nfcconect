@@ -4,16 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle, Nfc } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
 export function Login() {
-  const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
   const [error, setError] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
 
   // Validação
   const isValidEmail = (email: string) => {
@@ -21,16 +18,10 @@ export function Login() {
     return emailRegex.test(email);
   };
 
-  const isValidPassword = (password: string) => {
-    return password.length >= 6;
-  };
+  const isValidPassword = (password: string) => password.length >= 6;
 
   const isFormValid = () => {
-    if (isLogin) {
-      return isValidEmail(email) && isValidPassword(password);
-    } else {
-      return isValidEmail(email) && isValidPassword(password) && name.length >= 2;
-    }
+    return isValidEmail(email) && isValidPassword(password);
   };
 
   // Login mutation
@@ -43,171 +34,116 @@ export function Login() {
     },
   });
 
-  // Register mutation
-  const registerMutation = trpc.auth.register.useMutation({
-    onSuccess: () => {
-      window.location.href = "/dashboard";
-    },
-    onError: (error) => {
-      setError(error.message || "Erro ao registrar");
-    },
-  });
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
     if (!isFormValid()) {
-      setError(
-        isLogin
-          ? "Email e senha são obrigatórios"
-          : "Preencha todos os campos corretamente"
-      );
+      setError("Email ou senha inválidos");
       return;
     }
 
-    setIsLoading(true);
-
-    try {
-      if (isLogin) {
-        await loginMutation.mutateAsync({
-          email,
-          password,
-        });
-      } else {
-        await registerMutation.mutateAsync({
-          email,
-          password,
-          name,
-        });
-      }
-    } catch (err) {
-      // Erro já é tratado no onError do mutation
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleToggleMode = () => {
-    setIsLogin(!isLogin);
-    setError("");
-    setEmail("");
-    setPassword("");
-    setName("");
+    loginMutation.mutate({ email, password });
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-2">
-          <CardTitle className="text-2xl font-bold">
-            {isLogin ? "Entrar" : "Criar Conta"}
-          </CardTitle>
-          <CardDescription>
-            {isLogin
-              ? "Faça login com suas credenciais"
-              : "Crie uma nova conta para começar"}
-          </CardDescription>
-        </CardHeader>
+    <div className="min-h-screen bg-white flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        {/* Header */}
+        <div className="flex flex-col items-center gap-4 mb-8">
+          <Link href="/">
+            <div className="w-16 h-16 bg-black flex items-center justify-center cursor-pointer hover:bg-gray-900 transition-colors">
+              <Nfc className="w-10 h-10 text-white" />
+            </div>
+          </Link>
+          <div className="text-center">
+            <h1 className="text-3xl font-black uppercase tracking-tight">NFC//SYS</h1>
+            <p className="text-gray-600 mt-2">Sistema de Gerenciamento</p>
+          </div>
+        </div>
 
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Nome - apenas no registro */}
-            {!isLogin && (
+        {/* Login Card */}
+        <Card className="border-4 border-black rounded-none brutal-shadow">
+          <CardHeader className="border-b-4 border-black pb-6">
+            <CardTitle className="text-2xl uppercase font-black">Login</CardTitle>
+            <CardDescription className="text-base mt-2">
+              Acesse o painel administrativo
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent className="pt-6">
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Email */}
               <div className="space-y-2">
-                <label htmlFor="name" className="text-sm font-medium">
-                  Nome
+                <label className="text-sm font-bold uppercase tracking-widest">
+                  Email
                 </label>
                 <Input
-                  id="name"
-                  type="text"
-                  placeholder="Seu nome completo"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  disabled={isLoading}
-                  minLength={2}
+                  type="email"
+                  placeholder="seu@email.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="border-2 border-black rounded-none h-12 text-base font-medium"
+                  disabled={loginMutation.isPending}
                 />
-                {name && name.length < 2 && (
-                  <p className="text-xs text-red-500">
-                    Nome deve ter pelo menos 2 caracteres
-                  </p>
-                )}
               </div>
-            )}
 
-            {/* Email */}
-            <div className="space-y-2">
-              <label htmlFor="email" className="text-sm font-medium">
-                Email
-              </label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="seu@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={isLoading}
-              />
-              {email && !isValidEmail(email) && (
-                <p className="text-xs text-red-500">Email inválido</p>
+              {/* Password */}
+              <div className="space-y-2">
+                <label className="text-sm font-bold uppercase tracking-widest">
+                  Senha
+                </label>
+                <Input
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="border-2 border-black rounded-none h-12 text-base font-medium"
+                  disabled={loginMutation.isPending}
+                />
+              </div>
+
+              {/* Error Alert */}
+              {error && (
+                <Alert className="border-2 border-red-500 bg-red-50 rounded-none">
+                  <AlertCircle className="h-4 w-4 text-red-600" />
+                  <AlertDescription className="text-red-600 font-medium">
+                    {error}
+                  </AlertDescription>
+                </Alert>
               )}
-            </div>
 
-            {/* Senha */}
-            <div className="space-y-2">
-              <label htmlFor="password" className="text-sm font-medium">
-                Senha
-              </label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="Mínimo 6 caracteres"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={isLoading}
-                minLength={6}
-              />
-              {password && !isValidPassword(password) && (
-                <p className="text-xs text-red-500">
-                  Senha deve ter pelo menos 6 caracteres
-                </p>
-              )}
-            </div>
-
-            {/* Erro */}
-            {error && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
-            {/* Botão Submit */}
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={!isFormValid() || isLoading}
-            >
-              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isLogin ? "Entrar" : "Registrar"}
-            </Button>
-
-            {/* Toggle entre login e registro */}
-            <div className="text-center text-sm">
-              <span className="text-muted-foreground">
-                {isLogin ? "Não tem conta? " : "Já tem conta? "}
-              </span>
-              <button
-                type="button"
-                onClick={handleToggleMode}
-                className="text-primary hover:underline font-medium"
+              {/* Submit Button */}
+              <Button
+                type="submit"
+                disabled={!isFormValid() || loginMutation.isPending}
+                className="w-full h-12 text-base font-bold uppercase brutal-shadow-sm hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all disabled:opacity-50 disabled:cursor-not-allowed rounded-none"
               >
-                {isLogin ? "Registre-se" : "Faça login"}
-              </button>
+                {loginMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Entrando...
+                  </>
+                ) : (
+                  "Entrar"
+                )}
+              </Button>
+            </form>
+
+            {/* Footer */}
+            <div className="mt-6 pt-6 border-t-2 border-gray-200 text-center">
+              <p className="text-sm text-gray-600">
+                Voltar para{" "}
+                <Link href="/">
+                  <span className="font-bold text-black hover:underline cursor-pointer">
+                    home
+                  </span>
+                </Link>
+              </p>
             </div>
-          </form>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

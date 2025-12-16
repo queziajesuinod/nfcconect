@@ -1,6 +1,20 @@
 import { pgTable, pgEnum, serial, varchar, text, boolean, timestamp, integer, uuid, index } from "drizzle-orm/pg-core";
 
 /**
+ * Perfis table - existing table from dev_iecg schema
+ * Stores user profiles/roles
+ */
+export const perfis = pgTable("Perfis", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  descricao: varchar("descricao", { length: 255 }),
+  createdAt: timestamp("createdAt", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type Perfil = typeof perfis.$inferSelect;
+export type InsertPerfil = typeof perfis.$inferInsert;
+
+/**
  * Users table - existing table from dev_iecg schema
  * Used for JWT authentication
  */
@@ -9,6 +23,7 @@ export const users = pgTable("Users", {
   name: varchar("name", { length: 255 }),
   email: varchar("email", { length: 255 }),
   active: boolean("active").default(true),
+  perfilId: uuid("perfilId"),
   passwordHash: varchar("passwordHash", { length: 255 }),
   username: varchar("username", { length: 255 }),
   createdAt: timestamp("createdAt", { withTimezone: true }).defaultNow().notNull(),

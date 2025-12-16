@@ -4,7 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { generateToken, hashPassword, verifyPassword } from "../_core/jwt-auth";
 import { getSessionCookieOptions } from "../_core/cookies";
 import { getDb } from "../db";
-import { users, type InsertUser } from "../../drizzle/schema";
+import { users, perfis, type InsertUser } from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
 
 const COOKIE_NAME = "session";
@@ -54,6 +54,39 @@ export const authRouter = router({
           });
         }
 
+        // Validar se usuario tem perfil de administrador
+        if (!foundUser.perfilId) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Usuario nao possui acesso ao sistema",
+          });
+        }
+
+        // Buscar perfil do usuario
+        const perfil = await db
+          .select()
+          .from(perfis)
+          .where(eq(perfis.id, foundUser.perfilId))
+          .limit(1);
+
+        if (!perfil || perfil.length === 0) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Perfil do usuario nao encontrado",
+          });
+        }
+
+        // Validar se perfil eh administrador
+        const userPerfil = perfil[0];
+        const isAdmin = userPerfil.descricao?.toLowerCase().includes("admin");
+
+        if (!isAdmin) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Apenas administradores podem acessar o sistema",
+          });
+        }
+
         // Gerar token JWT
         const token = await generateToken({
           userId: foundUser.id,
@@ -84,80 +117,5 @@ export const authRouter = router({
       }
     }),
 
-  register: publicProcedure
-    .input(
-      z.object({
-        email: z.string().email(),
-        password: z.string().min(6),
-        name: z.string().min(2),
-      })
-    )
-    .mutation(async ({ input, ctx }) => {
-      try {
-        const db = await getDb();
-        if (!db) throw new Error("Database not available");
 
-        // Verificar se usuario ja existe
-        const existing = await db
-          .select()
-          .from(users)
-          .where(eq(users.email, input.email))
-          .limit(1);
-
-        if (existing && existing.length > 0) {
-          throw new TRPCError({
-            code: "CONFLICT",
-            message: "Email ja cadastrado",
-          });
-        }
-
-        // Hash da senha
-        const passwordHash = hashPassword(input.password);
-
-        // Criar novo usuario
-        const newUserResult = await db
-          .insert(users)
-          .values({
-            email: input.email,
-            name: input.name,
-            passwordHash,
-            active: true,
-          })
-          .returning();
-
-        if (!newUserResult || newUserResult.length === 0) {
-          throw new Error("Failed to create user");
-        }
-
-        const newUser = newUserResult[0];
-
-        // Gerar token JWT
-        const token = await generateToken({
-          userId: newUser.id,
-          email: newUser.email || "",
-          role: "user",
-        });
-
-        // Salvar token em cookie
-        const cookieOptions = getSessionCookieOptions(ctx.req);
-        ctx.res.cookie(COOKIE_NAME, token, cookieOptions);
-
-        return {
-          success: true,
-          token,
-          user: {
-            id: newUser.id,
-            email: newUser.email,
-            name: newUser.name,
-          },
-        };
-      } catch (error) {
-        if (error instanceof TRPCError) throw error;
-        console.error("[Auth] Register error:", error);
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Erro ao registrar usuario",
-        });
-      }
-    }),
 });
