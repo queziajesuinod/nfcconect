@@ -1,21 +1,16 @@
 import { COOKIE_NAME } from "@shared/const";
-import { ForbiddenError } from "@shared/_core/errors";
 import { parse as parseCookieHeader } from "cookie";
 import type { Request } from "express";
-import { jwtVerify } from "jose";
 import type { User } from "../../drizzle/schema";
-import { ENV } from "./env";
 import { verifyToken } from "./jwt-auth";
+import { getDb } from "../db";
+import { users } from "../../drizzle/schema";
+import { eq } from "drizzle-orm";
 
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value.length > 0;
 
 class SDKServer {
-  private getSessionSecret() {
-    const secret = ENV.cookieSecret;
-    return new TextEncoder().encode(secret);
-  }
-
   private parseCookies(cookieHeader: string | undefined) {
     if (!cookieHeader) {
       return new Map<string, string>();
@@ -29,14 +24,14 @@ class SDKServer {
     cookieValue: string | undefined | null
   ): Promise<{ userId: string; email: string; role: string } | null> {
     if (!cookieValue) {
-      console.warn("[Auth] Missing session cookie");
+      console.debug("[Auth] Missing session cookie");
       return null;
     }
 
     try {
       const payload = await verifyToken(cookieValue);
       if (!payload) {
-        console.warn("[Auth] Token verification failed");
+        console.debug("[Auth] Token verification failed");
         return null;
       }
 
@@ -53,7 +48,7 @@ class SDKServer {
         role: role || "user",
       };
     } catch (error) {
-      console.warn("[Auth] Session verification failed", String(error));
+      console.debug("[Auth] Session verification failed", String(error));
       return null;
     }
   }
@@ -68,21 +63,25 @@ class SDKServer {
         return null;
       }
 
-      // Return user object with JWT payload
-      // Note: In a real app, you'd fetch from DB here
-      return {
-        id: session.userId,
-        email: session.email,
-        name: null,
-        active: true,
-        passwordHash: null,
-        username: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        telefone: null,
-        cpf: null,
-        endereco: null,
-      } as User;
+      // Fetch user from database to get full user object
+      const db = await getDb();
+      if (!db) {
+        console.error("[Auth] Database not available");
+        return null;
+      }
+
+      const userResult = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, session.userId))
+        .limit(1);
+
+      if (!userResult || userResult.length === 0) {
+        console.warn("[Auth] User not found in database");
+        return null;
+      }
+
+      return userResult[0];
     } catch (error) {
       console.error("[Auth] Authentication failed:", error);
       return null;

@@ -1,4 +1,5 @@
 import { SignJWT, jwtVerify } from "jose";
+import * as bcrypt from "bcrypt";
 import type { JWTPayload } from "jose";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-in-production";
@@ -11,7 +12,7 @@ export interface AuthPayload extends JWTPayload {
 }
 
 /**
- * Gera um JWT token
+ * Gera um JWT token com expiração de 7 dias
  */
 export async function generateToken(payload: AuthPayload): Promise<string> {
   const token = await new SignJWT(payload)
@@ -47,28 +48,17 @@ export function extractTokenFromHeader(authHeader?: string): string | null {
 }
 
 /**
- * Hash simples de senha (usar bcrypt em produção!)
- * AVISO: Isso é apenas para demonstração. Use bcrypt em produção!
+ * Hash de senha com bcrypt (10 rounds)
+ * Seguro para produção
  */
-export function hashPassword(password: string): string {
-  // Para produção, use: import bcrypt from 'bcrypt'
-  // return await bcrypt.hash(password, 10);
-  
-  // Implementação simples para desenvolvimento
-  const encoder = new TextEncoder();
-  const data = encoder.encode(password + JWT_SECRET);
-  // Usar um hash simples (não seguro para produção!)
-  let hash = 0;
-  for (let i = 0; i < data.length; i++) {
-    hash = ((hash << 5) - hash) + data[i];
-    hash = hash & hash; // Convert to 32bit integer
-  }
-  return Math.abs(hash).toString(16);
+export async function hashPassword(password: string): Promise<string> {
+  const salt = await bcrypt.genSalt(10);
+  return bcrypt.hash(password, salt);
 }
 
 /**
- * Verifica se a senha está correta
+ * Verifica se a senha está correta comparando com hash bcrypt
  */
-export function verifyPassword(password: string, hash: string): boolean {
-  return hashPassword(password) === hash;
+export async function verifyPassword(password: string, hash: string): Promise<boolean> {
+  return bcrypt.compare(password, hash);
 }

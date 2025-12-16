@@ -1,10 +1,14 @@
 export const ENV = {
-  appId: process.env.VITE_APP_ID ?? "",
-  cookieSecret: process.env.JWT_SECRET ?? "",
+  // JWT Configuration
+  cookieSecret: process.env.JWT_SECRET ?? "your-secret-key-change-in-production",
+  
+  // Database Configuration
   databaseUrl: process.env.DATABASE_URL ?? "",
-  oAuthServerUrl: process.env.OAUTH_SERVER_URL ?? "",
-  ownerOpenId: process.env.OWNER_OPEN_ID ?? "",
+  
+  // Application Configuration
   isProduction: process.env.NODE_ENV === "production",
+  
+  // Manus APIs (for notifications, storage, etc - optional)
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
 };
