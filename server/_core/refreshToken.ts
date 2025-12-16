@@ -19,7 +19,7 @@ export function generateRefreshTokenString(): string {
  * Cria um novo refresh token no banco de dados
  */
 export async function createRefreshToken(
-  userId: number,
+  userId: string,
   ipAddress?: string,
   userAgent?: string
 ): Promise<string> {
@@ -45,7 +45,7 @@ export async function createRefreshToken(
  */
 export async function validateRefreshToken(
   token: string
-): Promise<{ userId: number; id: number } | null> {
+): Promise<{ userId: string; id: number } | null> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
@@ -98,7 +98,7 @@ export async function revokeRefreshToken(tokenId: number): Promise<void> {
 /**
  * Revoga todos os refresh tokens de um usuário (logout em todos os dispositivos)
  */
-export async function revokeAllUserTokens(userId: number): Promise<void> {
+export async function revokeAllUserTokens(userId: string): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
@@ -130,7 +130,7 @@ export async function cleanupExpiredTokens(): Promise<number> {
 /**
  * Cria um novo JWT session token
  */
-export async function createSessionToken(userId: number): Promise<string> {
+export async function createSessionToken(userId: string): Promise<string> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
@@ -150,10 +150,9 @@ export async function createSessionToken(userId: number): Promise<string> {
 
   const token = await new SignJWT({
     sub: user.id.toString(),
-    openId: user.openId,
+    userId: user.id,
     name: user.name,
     email: user.email,
-    role: user.role,
   })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()

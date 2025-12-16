@@ -47,7 +47,7 @@ export const authRouter = router({
         const foundUser = user[0];
 
         // Verificar senha
-        if (!verifyPassword(input.password, foundUser.passwordHash)) {
+        if (!foundUser.passwordHash || !verifyPassword(input.password, foundUser.passwordHash)) {
           throw new TRPCError({
             code: "UNAUTHORIZED",
             message: "Email ou senha invalidos",

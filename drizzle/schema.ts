@@ -29,7 +29,7 @@ export type InsertUser = typeof users.$inferInsert;
  */
 export const refreshTokens = pgTable("refresh_tokens", {
   id: serial("id").primaryKey(),
-  userId: integer("userId").notNull(),
+  userId: uuid("userId").notNull(),
   token: varchar("token", { length: 512 }).notNull().unique(),
   expiresAt: timestamp("expiresAt").notNull(),
   revokedAt: timestamp("revokedAt"), // NULL = token válido, SET = token revogado
