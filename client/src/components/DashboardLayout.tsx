@@ -1,4 +1,4 @@
-import { useAuth } from "@/_core/hooks/useAuth";
+
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
+import { useAuth } from "@/hooks/useAuth";
 import { LayoutDashboard, LogOut, PanelLeft, Users, Nfc, Activity, Link2, MapPin, CalendarClock, Radio, Users2 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
