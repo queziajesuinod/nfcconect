@@ -1,0 +1,270 @@
+{
+  "query": "SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema NOT LIKE 'pg_%' AND table_schema != 'information_schema' ORDER BY table_schema, table_name;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user UngaHs8pWFi1YDJ.20dee1cf0b01 --database A9ZgU7F7LArxeeWD3JdJzF --execute SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema NOT LIKE 'pg_%' AND table_schema != 'information_schema' ORDER BY table_schema, table_name;",
+  "rows": [
+    {
+      "table_schema": "A9ZgU7F7LArxeeWD3JdJzF",
+      "table_name": "__drizzle_migrations"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "ANALYZE_STATUS"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "CHARACTER_SETS"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "CHECK_CONSTRAINTS"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "CLIENT_ERRORS_SUMMARY_BY_HOST"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "CLIENT_ERRORS_SUMMARY_BY_USER"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "CLIENT_ERRORS_SUMMARY_GLOBAL"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "CLUSTER_DEADLOCKS"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "CLUSTER_MEMORY_USAGE"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "CLUSTER_MEMORY_USAGE_OPS_HISTORY"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "CLUSTER_PROCESSLIST"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "CLUSTER_STATEMENTS_SUMMARY_HISTORY"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "CLUSTER_TIDB_STATEMENTS_STATS"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "CLUSTER_TIDB_TRX"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "CLUSTER_TRX_SUMMARY"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "COLLATIONS"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "COLLATION_CHARACTER_SET_APPLICABILITY"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "COLUMNS"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "COLUMN_PRIVILEGES"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "COLUMN_STATISTICS"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "DATA_LOCK_WAITS"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "DDL_JOBS"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "DEADLOCKS"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "ENGINES"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "EVENTS"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "FILES"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "GLOBAL_STATUS"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "GLOBAL_VARIABLES"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "KEYSPACE_META"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "KEYWORDS"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "KEY_COLUMN_USAGE"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "MEMORY_USAGE"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "MEMORY_USAGE_OPS_HISTORY"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "OPTIMIZER_TRACE"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "PARAMETERS"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "PARTITIONS"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "PLUGINS"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "PROCESSLIST"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "PROFILING"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "REFERENTIAL_CONSTRAINTS"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "ROUTINES"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "RUNAWAY_WATCHES"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "SCHEMATA"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "SCHEMA_PRIVILEGES"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "SEQUENCES"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "SESSION_STATUS"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "SESSION_VARIABLES"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "STATEMENTS_SUMMARY_HISTORY"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "STATISTICS"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "TABLES"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "TABLESPACES"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "TABLE_CONSTRAINTS"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "TABLE_PRIVILEGES"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "TABLE_STORAGE_STATS"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "TIDB_INDEXES"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "TIDB_STATEMENTS_STATS"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "TIDB_TRX"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "TIFLASH_INDEXES"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "TIFLASH_REPLICA"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "TRIGGERS"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "TRX_SUMMARY"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "USER_ATTRIBUTES"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "USER_PRIVILEGES"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "VARIABLES_INFO"
+    },
+    {
+      "table_schema": "INFORMATION_SCHEMA",
+      "table_name": "VIEWS"
+    }
+  ],
+  "messages": [],
+  "stdout": "table_schema\ttable_name\nA9ZgU7F7LArxeeWD3JdJzF\t__drizzle_migrations\nINFORMATION_SCHEMA\tANALYZE_STATUS\nINFORMATION_SCHEMA\tCHARACTER_SETS\nINFORMATION_SCHEMA\tCHECK_CONSTRAINTS\nINFORMATION_SCHEMA\tCLIENT_ERRORS_SUMMARY_BY_HOST\nINFORMATION_SCHEMA\tCLIENT_ERRORS_SUMMARY_BY_USER\nINFORMATION_SCHEMA\tCLIENT_ERRORS_SUMMARY_GLOBAL\nINFORMATION_SCHEMA\tCLUSTER_DEADLOCKS\nINFORMATION_SCHEMA\tCLUSTER_MEMORY_USAGE\nINFORMATION_SCHEMA\tCLUSTER_MEMORY_USAGE_OPS_HISTORY\nINFORMATION_SCHEMA\tCLUSTER_PROCESSLIST\nINFORMATION_SCHEMA\tCLUSTER_STATEMENTS_SUMMARY_HISTORY\nINFORMATION_SCHEMA\tCLUSTER_TIDB_STATEMENTS_STATS\nINFORMATION_SCHEMA\tCLUSTER_TIDB_TRX\nINFORMATION_SCHEMA\tCLUSTER_TRX_SUMMARY\nINFORMATION_SCHEMA\tCOLLATIONS\nINFORMATION_SCHEMA\tCOLLATION_CHARACTER_SET_APPLICABILITY\nINFORMATION_SCHEMA\tCOLUMNS\nINFORMATION_SCHEMA\tCOLUMN_PRIVILEGES\nINFORMATION_SCHEMA\tCOLUMN_STATISTICS\nINFORMATION_SCHEMA\tDATA_LOCK_WAITS\nINFORMATION_SCHEMA\tDDL_JOBS\nINFORMATION_SCHEMA\tDEADLOCKS\nINFORMATION_SCHEMA\tENGINES\nINFORMATION_SCHEMA\tEVENTS\nINFORMATION_SCHEMA\tFILES\nINFORMATION_SCHEMA\tGLOBAL_STATUS\nINFORMATION_SCHEMA\tGLOBAL_VARIABLES\nINFORMATION_SCHEMA\tKEYSPACE_META\nINFORMATION_SCHEMA\tKEYWORDS\nINFORMATION_SCHEMA\tKEY_COLUMN_USAGE\nINFORMATION_SCHEMA\tMEMORY_USAGE\nINFORMATION_SCHEMA\tMEMORY_USAGE_OPS_HISTORY\nINFORMATION_SCHEMA\tOPTIMIZER_TRACE\nINFORMATION_SCHEMA\tPARAMETERS\nINFORMATION_SCHEMA\tPARTITIONS\nINFORMATION_SCHEMA\tPLUGINS\nINFORMATION_SCHEMA\tPROCESSLIST\nINFORMATION_SCHEMA\tPROFILING\nINFORMATION_SCHEMA\tREFERENTIAL_CONSTRAINTS\nINFORMATION_SCHEMA\tROUTINES\nINFORMATION_SCHEMA\tRUNAWAY_WATCHES\nINFORMATION_SCHEMA\tSCHEMATA\nINFORMATION_SCHEMA\tSCHEMA_PRIVILEGES\nINFORMATION_SCHEMA\tSEQUENCES\nINFORMATION_SCHEMA\tSESSION_STATUS\nINFORMATION_SCHEMA\tSESSION_VARIABLES\nINFORMATION_SCHEMA\tSTATEMENTS_SUMMARY_HISTORY\nINFORMATION_SCHEMA\tSTATISTICS\nINFORMATION_SCHEMA\tTABLES\nINFORMATION_SCHEMA\tTABLESPACES\nINFORMATION_SCHEMA\tTABLE_CONSTRAINTS\nINFORMATION_SCHEMA\tTABLE_PRIVILEGES\nINFORMATION_SCHEMA\tTABLE_STORAGE_STATS\nINFORMATION_SCHEMA\tTIDB_INDEXES\nINFORMATION_SCHEMA\tTIDB_STATEMENTS_STATS\nINFORMATION_SCHEMA\tTIDB_TRX\nINFORMATION_SCHEMA\tTIFLASH_INDEXES\nINFORMATION_SCHEMA\tTIFLASH_REPLICA\nINFORMATION_SCHEMA\tTRIGGERS\nINFORMATION_SCHEMA\tTRX_SUMMARY\nINFORMATION_SCHEMA\tUSER_ATTRIBUTES\nINFORMATION_SCHEMA\tUSER_PRIVILEGES\nINFORMATION_SCHEMA\tVARIABLES_INFO\nINFORMATION_SCHEMA\tVIEWS\n",
+  "stderr": "",
+  "execution_time_ms": 56
+}

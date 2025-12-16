@@ -1,0 +1,16 @@
+{
+  "query": "SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT LIKE 'pg_%' AND schema_name != 'information_schema' ORDER BY schema_name;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user UngaHs8pWFi1YDJ.20dee1cf0b01 --database A9ZgU7F7LArxeeWD3JdJzF --execute SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT LIKE 'pg_%' AND schema_name != 'information_schema' ORDER BY schema_name;",
+  "rows": [
+    {
+      "schema_name": "A9ZgU7F7LArxeeWD3JdJzF"
+    },
+    {
+      "schema_name": "INFORMATION_SCHEMA"
+    }
+  ],
+  "messages": [],
+  "stdout": "schema_name\nA9ZgU7F7LArxeeWD3JdJzF\nINFORMATION_SCHEMA\n",
+  "stderr": "",
+  "execution_time_ms": 52
+}
