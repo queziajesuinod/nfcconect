@@ -209,3 +209,19 @@
 - [ ] Configurar alertas de falha de autenticação
 - [ ] Implementar refresh token automático
 - [ ] Adicionar 2FA (opcional)
+
+
+## Refresh Token e Renovação de Sessão
+- [x] Adicionar tabela de refresh tokens ao schema
+- [x] Implementar lógica de refresh token no backend
+- [x] Criar middleware de renovação automática
+- [ ] Implementar refresh no frontend
+- [ ] Criar testes para refresh token
+- [ ] Documentar refresh token
+
+## Configuração de Banco de Dados Externo
+- [x] Criar documentação DATABASE_CONFIGURATION.md
+- [x] Documentar todas as plataformas (Railway, Render, AWS, Azure, Supabase, etc)
+- [x] Incluir exemplos de connection strings
+- [x] Adicionar troubleshooting
+- [ ] Testar com banco externo real

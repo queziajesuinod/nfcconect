@@ -19,6 +19,24 @@ export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
 /**
+ * Refresh Tokens - stores refresh tokens for session renewal
+ * Allows users to stay logged in without re-entering credentials
+ */
+export const refreshTokens = pgTable("refresh_tokens", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  token: varchar("token", { length: 512 }).notNull().unique(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  revokedAt: timestamp("revokedAt"), // NULL = token válido, SET = token revogado
+  ipAddress: varchar("ipAddress", { length: 64 }),
+  userAgent: text("userAgent"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type RefreshToken = typeof refreshTokens.$inferSelect;
+export type InsertRefreshToken = typeof refreshTokens.$inferInsert;
+
+/**
  * NFC Tags - stores information about physical NFC tags
  */
 export const nfcTags = pgTable("nfc_tags", {
