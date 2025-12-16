@@ -3,11 +3,13 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { generateToken, verifyPassword } from "../_core/jwt-auth";
 import { getSessionCookieOptions } from "../_core/cookies";
-import { getDb } from "../db";
+import { ENV } from "../_core/env";
+import { createAdminUser, getDb } from "../db";
 import { users, perfis } from "../../drizzle/schema";
-import { eq } from "drizzle-orm";
+import { eq, ilike } from "drizzle-orm";
 
 const COOKIE_NAME = "session";
+const REGISTRATION_SECRET = ENV.registrationSecret;
 
 export const authRouter = router({
   /**
@@ -23,6 +25,52 @@ export const authRouter = router({
     ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
     return { success: true } as const;
   }),
+
+  /**
+   * Registrar um administrador usando o secret configurado
+   */
+  register: publicProcedure
+    .input(
+      z.object({
+        name: z.string().min(2, "Informe o nome completo"),
+        email: z.string().email("Email inválido"),
+        username: z.string().min(3, "Digite um username válido").optional(),
+        password: z.string().min(8, "Senha deve ter pelo menos 8 caracteres"),
+        secret: z.string().min(1, "Informe o código de registro"),
+      })
+    )
+    .mutation(async ({ input }) => {
+      if (!REGISTRATION_SECRET) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Registro desabilitado",
+        });
+      }
+
+      if (input.secret !== REGISTRATION_SECRET) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Código de registro inválido",
+        });
+      }
+
+      try {
+        const user = await createAdminUser({
+          name: input.name,
+          email: input.email,
+          username: input.username || null,
+          password: input.password,
+        });
+
+        return { success: true, id: user.id };
+      } catch (error) {
+        console.error("[Auth] Registration failed:", error);
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: (error as Error).message || "Não foi possível criar o usuário",
+        });
+      }
+    }),
 
   /**
    * Login com email e senha
@@ -43,13 +91,15 @@ export const authRouter = router({
         if (!db) throw new Error("Database not available");
 
         // Buscar usuário no banco de dados
+        // Case-insensitive email lookup to avoid issues with mixed-case entries
         const userResult = await db
           .select()
           .from(users)
-          .where(eq(users.email, input.email))
+          .where(ilike(users.email, input.email))
           .limit(1);
 
         if (!userResult || userResult.length === 0) {
+          console.warn("[Auth] User not found for email", input.email);
           throw new TRPCError({
             code: "UNAUTHORIZED",
             message: "Email ou senha inválidos",
@@ -68,15 +118,17 @@ export const authRouter = router({
 
         // Verificar se usuário tem hash de senha
         if (!foundUser.passwordHash) {
+          console.warn("[Auth] User missing passwordHash", foundUser.id);
           throw new TRPCError({
             code: "UNAUTHORIZED",
             message: "Email ou senha inválidos",
           });
         }
 
-        // Verificar senha com bcrypt
-        const passwordValid = await verifyPassword(input.password, foundUser.passwordHash);
+        // Verificar senha (bcrypt ou hash legado com salt)
+        const passwordValid = await verifyPassword(input.password, foundUser.passwordHash, (foundUser as any).salt);
         if (!passwordValid) {
+          console.warn("[Auth] Invalid password for user", foundUser.id);
           throw new TRPCError({
             code: "UNAUTHORIZED",
             message: "Email ou senha inválidos",
@@ -105,22 +157,16 @@ export const authRouter = router({
           });
         }
 
-        // Validar se perfil é administrador
         const userPerfil = perfilResult[0];
-        const isAdmin = userPerfil.descricao?.toLowerCase().includes("admin");
-
-        if (!isAdmin) {
-          throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "Apenas administradores podem acessar o sistema",
-          });
-        }
 
         // Gerar JWT token
         const token = await generateToken({
           userId: foundUser.id,
           email: foundUser.email || "",
-          role: "admin",
+          role: "user",
+          perfilId: foundUser.perfilId || undefined,
+          username: (foundUser as any).username,
+          name: foundUser.name || undefined,
         });
 
         // Salvar token em cookie httpOnly
@@ -134,6 +180,8 @@ export const authRouter = router({
             id: foundUser.id,
             email: foundUser.email,
             name: foundUser.name,
+            perfilId: foundUser.perfilId,
+            perfil: userPerfil?.descricao,
           },
         };
       } catch (error) {

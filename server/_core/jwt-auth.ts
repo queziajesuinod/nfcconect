@@ -1,6 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
-import * as bcrypt from "bcrypt";
 import type { JWTPayload } from "jose";
+import { hashPassword, verifyPassword } from "./password";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-in-production";
 const SECRET = new TextEncoder().encode(JWT_SECRET);
@@ -9,11 +9,11 @@ export interface AuthPayload extends JWTPayload {
   userId: string;
   email: string;
   role: "admin" | "user";
+  perfilId?: string;
+  username?: string | null;
+  name?: string | null;
 }
 
-/**
- * Gera um JWT token com expiração de 7 dias
- */
 export async function generateToken(payload: AuthPayload): Promise<string> {
   const token = await new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
@@ -24,9 +24,6 @@ export async function generateToken(payload: AuthPayload): Promise<string> {
   return token;
 }
 
-/**
- * Verifica e decodifica um JWT token
- */
 export async function verifyToken(token: string): Promise<AuthPayload | null> {
   try {
     const verified = await jwtVerify(token, SECRET);
@@ -37,9 +34,6 @@ export async function verifyToken(token: string): Promise<AuthPayload | null> {
   }
 }
 
-/**
- * Extrai o token do header Authorization
- */
 export function extractTokenFromHeader(authHeader?: string): string | null {
   if (!authHeader) return null;
   const parts = authHeader.split(" ");
@@ -47,18 +41,4 @@ export function extractTokenFromHeader(authHeader?: string): string | null {
   return parts[1];
 }
 
-/**
- * Hash de senha com bcrypt (10 rounds)
- * Seguro para produção
- */
-export async function hashPassword(password: string): Promise<string> {
-  const salt = await bcrypt.genSalt(10);
-  return bcrypt.hash(password, salt);
-}
-
-/**
- * Verifica se a senha está correta comparando com hash bcrypt
- */
-export async function verifyPassword(password: string, hash: string): Promise<boolean> {
-  return bcrypt.compare(password, hash);
-}
+export { hashPassword, verifyPassword };

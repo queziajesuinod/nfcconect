@@ -131,18 +131,26 @@ export function Login() {
             </form>
 
             {/* Footer */}
-            <div className="mt-6 pt-6 border-t-2 border-gray-200 text-center">
-              <p className="text-sm text-gray-600">
-                Voltar para{" "}
-                <Link href="/">
-                  <span className="font-bold text-black hover:underline cursor-pointer">
-                    home
-                  </span>
-                </Link>
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+          <div className="mt-6 pt-6 border-t-2 border-gray-200 text-center">
+            <p className="text-sm text-gray-600">
+              Voltar para{" "}
+              <Link href="/">
+                <span className="font-bold text-black hover:underline cursor-pointer">
+                  home
+                </span>
+              </Link>
+            </p>
+            <p className="text-sm text-gray-600">
+              Precisa de acesso administrativo?{" "}
+              <Link href="/register">
+                <span className="font-bold text-black hover:underline cursor-pointer">
+                  Registrar administrador
+                </span>
+              </Link>
+            </p>
+          </div>
+        </CardContent>
+      </Card>
       </div>
     </div>
   );

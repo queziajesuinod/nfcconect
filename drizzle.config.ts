@@ -9,11 +9,5 @@ export default defineConfig({
   schema: "./drizzle/schema.ts",
   out: "./drizzle",
   dialect: "postgresql",
-  dbCredentials: {
-    url: connectionString,
-    ssl: {
-      rejectUnauthorized: false,
-    },
-  },
   schemaFilter: ["dev_iecg"],
 });

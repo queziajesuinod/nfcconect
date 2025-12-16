@@ -143,6 +143,7 @@ export const notificationGroups = pgTable("notification_groups", {
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"),
   redirectUrl: text("redirectUrl"),
+  color: varchar("color", { length: 7 }).default("#3B82F6").notNull(),
   isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { withTimezone: true }).defaultNow().notNull(),

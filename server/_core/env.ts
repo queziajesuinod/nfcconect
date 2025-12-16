@@ -1,9 +1,13 @@
+import "dotenv/config";
+
 export const ENV = {
   // JWT Configuration
   cookieSecret: process.env.JWT_SECRET ?? "your-secret-key-change-in-production",
   
   // Database Configuration
   databaseUrl: process.env.DATABASE_URL ?? "",
+  dbSchema: process.env.DB_SCHEMA ?? "dev_iecg",
+  registrationSecret: process.env.REGISTRATION_SECRET ?? "",
   
   // Application Configuration
   isProduction: process.env.NODE_ENV === "production",

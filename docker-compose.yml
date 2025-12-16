@@ -1,60 +1,7 @@
 version: '3.8'
 
 services:
-  # Traefik - Reverse Proxy com HTTPS automático
-  traefik:
-    image: traefik:v3.0-alpine
-    container_name: traefik
-    restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-    networks:
-      - nfc_network
-    ports:
-      - "80:80"
-      - "443:443"
-    environment:
-      - CF_API_EMAIL=${CF_API_EMAIL:-}
-      - CF_API_KEY=${CF_API_KEY:-}
-      - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN:-}
-    volumes:
-      - /etc/localtime:/etc/localtime:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./traefik/traefik.yml:/traefik.yml:ro
-      - ./traefik/acme.json:/acme.json
-      - ./traefik/config.yml:/config.yml:ro
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.traefik.entrypoints=http"
-      - "traefik.http.routers.traefik.rule=Host(`traefik.${DOMAIN}`)"
-      - "traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_USER}:${TRAEFIK_PASSWORD}"
-      - "traefik.http.routers.traefik.middlewares=traefik-auth"
-      - "traefik.http.routers.traefik.service=api@internal"
-
-  # PostgreSQL Database
-  postgres:
-    image: postgres:16-alpine
-    container_name: nfc_postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${DB_NAME:-nfc_management}
-      POSTGRES_USER: ${DB_USER:-nfc_user}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./backups:/backups
-    networks:
-      - nfc_network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-nfc_user}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    labels:
-      - "traefik.enable=false"
-
-  # NFC Management Application
+  # Traefik - Reverse Proxy com HTTPS automático# NFC Management Application
   app:
     build:
       context: .
@@ -116,36 +63,7 @@ services:
       - "traefik.http.middlewares.app-headers.headers.accesscontrolmaxage=100"
       - "traefik.http.middlewares.app-headers.headers.addvaryheader=true"
 
-  # pgAdmin - Interface web para PostgreSQL (opcional)
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: nfc_pgadmin
-    restart: unless-stopped
-    environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
-    networks:
-      - nfc_network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.pgadmin.entrypoints=http,https"
-      - "traefik.http.routers.pgadmin.rule=Host(`pgadmin.${DOMAIN}`)"
-      - "traefik.http.routers.pgadmin.service=pgadmin"
-      - "traefik.http.services.pgadmin.loadbalancer.server.port=80"
-      - "traefik.http.routers.pgadmin.middlewares=https-redirect"
-      - "traefik.http.routers.pgadmin-secure.entrypoints=https"
-      - "traefik.http.routers.pgadmin-secure.rule=Host(`pgadmin.${DOMAIN}`)"
-      - "traefik.http.routers.pgadmin-secure.service=pgadmin"
-      - "traefik.http.routers.pgadmin-secure.tls=true"
-      - "traefik.http.routers.pgadmin-secure.tls.certresolver=letsencrypt"
 
-volumes:
-  postgres_data:
-    driver: local
-  pgadmin_data:
-    driver: local
 
 networks:
   nfc_network:

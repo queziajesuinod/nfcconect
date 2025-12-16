@@ -20,6 +20,7 @@ import RealtimePanel from "./pages/RealtimePanel";
 import Groups from "./pages/Groups";
 import GroupDetails from "./pages/GroupDetails";
 import { Login } from "./pages/Login";
+import Register from "./pages/Register";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
 function Router() {
@@ -28,6 +29,7 @@ function Router() {
       {/* Public Routes */}
       <Route path="/" component={Home} />
       <Route path="/login" component={Login} />
+      <Route path="/register" component={Register} />
       <Route path="/nfc" component={NfcRegister} />
       <Route path="/l/:shortCode" component={LinkRedirect} />
       <Route path="/app" component={UserApp} />

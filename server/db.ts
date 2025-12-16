@@ -1,8 +1,9 @@
-import { eq, desc, sql, and, gte, lte, or, inArray } from "drizzle-orm";
+import { eq, desc, sql, and, gte, lte, or, inArray, ilike } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { 
   InsertUser, users, 
+  perfis,
   nfcTags, InsertNfcTag, NfcTag,
   nfcUsers, InsertNfcUser, NfcUser,
   userTagRelations, InsertUserTagRelation,
@@ -14,31 +15,140 @@ import {
   userLocationUpdates, InsertUserLocationUpdate,
   scheduleTagRelations, InsertScheduleTagRelation,
   notificationGroups, InsertNotificationGroup, NotificationGroup,
-  groupScheduleRelations, InsertGroupScheduleRelation,
+  groupScheduleRelations, InsertScheduleTagRelation,
   groupUserRelations, InsertGroupUserRelation
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
+import { generateLegacySalt, hashLegacyPassword } from "./_core/password";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 let _client: ReturnType<typeof postgres> | null = null;
 
+function maskDatabaseUrl(rawUrl: string): string {
+  try {
+    const url = new URL(rawUrl);
+    if (url.password) {
+      url.password = "*****";
+    }
+    return url.toString();
+  } catch {
+    return rawUrl.replace(/:(\/\/)?[^@]+@/, ":<credentials>@");
+  }
+}
+
 export async function getDb() {
-  if (!_db && process.env.DATABASE_URL) {
+  if (_db) return _db;
+
+  let connectionString = ENV.databaseUrl;
+
+  if (!connectionString) {
+    console.warn("[Database] Missing DATABASE_URL environment variable");
+    return null;
+  }
+
+  // Force search_path to the configured schema so queries hit the right tables.
+  const schema = ENV.dbSchema?.trim();
+  if (schema) {
     try {
-      _client = postgres(process.env.DATABASE_URL);
-      _db = drizzle(_client);
+      const url = new URL(connectionString);
+      const options = url.searchParams.get("options");
+      const searchPathOption = `--search_path=${schema}`;
+
+      // Preserve existing options and append search_path if not present.
+      if (!options || !options.includes("search_path")) {
+        const newOptions = options ? `${options} ${searchPathOption}` : searchPathOption;
+        url.searchParams.set("options", newOptions);
+      }
+
+      connectionString = url.toString();
     } catch (error) {
-      console.warn("[Database] Failed to connect:", error);
-      _db = null;
-      _client = null;
+      console.warn("[Database] Failed to append search_path to connection string:", error);
     }
   }
+
+  console.log("[Database] Connecting to", maskDatabaseUrl(connectionString));
+
+  try {
+    _client = postgres(connectionString);
+
+    // Ensure search_path is set even if connection string params are ignored by the driver.
+    if (schema) {
+      try {
+        // postgres tagged template binds as a value, so use unsafe with sanitized identifier.
+        const safeSchema = schema.replace(/"/g, "");
+        await _client.unsafe(`set search_path to "${safeSchema}"`);
+      } catch (err) {
+        console.warn("[Database] Failed to set search_path via SQL:", err);
+      }
+    }
+
+    _db = drizzle(_client);
+  } catch (error) {
+    console.warn("[Database] Failed to connect:", error);
+    _db = null;
+    _client = null;
+  }
+
   return _db;
 }
 
 // ============ USER FUNCTIONS (Admin Auth) ============
 
 // Removed: upsertUser function - no longer needed with JWT auth
+
+type CreateAdminUserInput = {
+  name: string;
+  email: string;
+  password: string;
+  username?: string | null;
+};
+
+async function findOrCreateAdminPerfil(db: NonNullable<ReturnType<typeof getDb>>) {
+  const existing = await db
+    .select()
+    .from(perfis)
+    .where(ilike(perfis.descricao, "%admin%"))
+    .orderBy(desc(perfis.createdAt))
+    .limit(1);
+
+  if (existing.length > 0) {
+    return existing[0];
+  }
+
+  const result = await db.insert(perfis).values({ descricao: "Administrador" }).returning();
+  return result[0];
+}
+
+export async function createAdminUser(input: CreateAdminUserInput) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const existing = await db
+    .select()
+    .from(users)
+    .where(ilike(users.email, input.email))
+    .limit(1);
+
+  if (existing.length > 0) {
+    throw new Error("Email já cadastrado");
+  }
+
+  const perfil = await findOrCreateAdminPerfil(db);
+  const salt = generateLegacySalt();
+  const passwordHash = hashLegacyPassword(input.password, salt);
+
+  const result = await db.insert(users).values({
+    name: input.name,
+    email: input.email,
+    active: true,
+    perfilId: perfil.id,
+    passwordHash,
+    salt,
+    username: input.username || null,
+  }).returning();
+
+  return result[0];
+}
 
 export async function getUserByEmail(email: string) {
   const db = await getDb();
@@ -1264,9 +1374,14 @@ export async function getTodayCheckinsForActiveSchedules() {
 export async function createNotificationGroup(data: InsertNotificationGroup) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  
-  const result = await db.insert(notificationGroups).values(data).returning({ id: notificationGroups.id });
-  return result[0].id;
+
+  try {
+    const result = await db.insert(notificationGroups).values(data).returning({ id: notificationGroups.id });
+    return result[0].id;
+  } catch (error) {
+    console.error("[DB] createNotificationGroup failed:", error);
+    throw error;
+  }
 }
 
 // Get all notification groups
