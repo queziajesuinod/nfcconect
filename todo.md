@@ -198,3 +198,14 @@
 - [x] Adicionar filtros e busca de usuarios
 - [x] Adicionar link na pagina de grupos para acessar detalhes
 - [x] Adicionar endpoints tRPC getUsers e getSchedules
+
+
+## Configuração OAuth do Manus em Produção
+- [x] Criar guia de configuração OAuth (MANUS_OAUTH_PRODUCTION.md)
+- [x] Documentar fluxo de autenticação
+- [x] Criar guia de troubleshooting
+- [x] Criar exemplos de testes (MANUS_OAUTH_TESTS.md)
+- [ ] Testar OAuth em produção com domínio real
+- [ ] Configurar alertas de falha de autenticação
+- [ ] Implementar refresh token automático
+- [ ] Adicionar 2FA (opcional)
