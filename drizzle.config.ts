@@ -11,5 +11,9 @@ export default defineConfig({
   dialect: "postgresql",
   dbCredentials: {
     url: connectionString,
+    ssl: {
+      rejectUnauthorized: false,
+    },
   },
+  schemaFilter: ["dev_iecg"],
 });
