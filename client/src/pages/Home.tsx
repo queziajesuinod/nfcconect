@@ -1,7 +1,6 @@
-import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { getLoginUrl } from "@/const";
 import { Link } from "wouter";
+import { useAuth } from "@/hooks/useAuth";
 import { Nfc, Users, Activity, Link2, ArrowRight, LogIn } from "lucide-react";
 
 export default function Home() {
@@ -28,11 +27,11 @@ export default function Home() {
               </Button>
             </Link>
           ) : (
-            <a href={getLoginUrl()}>
+            <Link href="/login">
               <Button className="brutal-shadow-sm hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all font-bold uppercase">
                 <LogIn className="mr-2 w-4 h-4" /> Entrar
               </Button>
-            </a>
+            </Link>
           )}
         </div>
       </header>
@@ -64,11 +63,11 @@ export default function Home() {
                 </Button>
               </Link>
             ) : (
-              <a href={getLoginUrl()}>
+              <Link href="/login">
                 <Button size="lg" className="brutal-shadow text-lg px-8 py-6 h-auto hover:translate-x-2 hover:translate-y-2 hover:shadow-none transition-all font-bold uppercase">
                   Começar Agora <ArrowRight className="ml-3 w-5 h-5" />
                 </Button>
-              </a>
+              </Link>
             )}
           </div>
         </div>
@@ -152,11 +151,11 @@ export default function Home() {
                 </Button>
               </Link>
             ) : (
-              <a href={getLoginUrl()}>
+              <Link href="/login">
                 <Button size="lg" variant="outline" className="border-4 border-white text-white bg-transparent hover:bg-white hover:text-black text-lg px-8 py-6 h-auto font-bold uppercase transition-all">
                   Fazer Login <ArrowRight className="ml-3 w-5 h-5" />
                 </Button>
-              </a>
+              </Link>
             )}
           </div>
         </div>
