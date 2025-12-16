@@ -79,8 +79,8 @@ VITE_FRONTEND_FORGE_API_KEY=sk-PZ********************Ykoaf
 ### 7. OAuth URLs (NÃO ALTERE)
 
 ```bash
-OAUTH_SERVER_URL=https://api.manus.im
-VITE_OAUTH_PORTAL_URL=https://portal.manus.im
+OAUTH_SERVER_URL=https://api.manus.ai
+VITE_OAUTH_PORTAL_URL=https://portal.manus.ai
 ```
 
 ## Passo 3: Arquivo .env.local Completo
@@ -95,8 +95,8 @@ DATABASE_URL=postgresql://usuario:senha@host:porta/banco_dados
 # MANUS OAUTH
 # ============================================
 VITE_APP_ID=seu_app_id_aqui
-OAUTH_SERVER_URL=https://api.manus.im
-VITE_OAUTH_PORTAL_URL=https://portal.manus.im
+OAUTH_SERVER_URL=https://api.manus.ai
+VITE_OAUTH_PORTAL_URL=https://portal.manus.ai
 
 # ============================================
 # MANUS API

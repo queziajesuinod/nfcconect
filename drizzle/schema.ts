@@ -1,19 +1,24 @@
-import { pgTable, pgEnum, serial, varchar, text, boolean, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, pgEnum, serial, varchar, text, boolean, timestamp, integer, uuid, index } from "drizzle-orm/pg-core";
 
 /**
- * Core user table backing auth flow (admin users).
+ * Users table - existing table from dev_iecg schema
+ * Used for JWT authentication
  */
-export const users = pgTable("users", {
-  id: serial("id").primaryKey(),
-  openId: varchar("openId", { length: 64 }).notNull().unique(),
-  name: text("name"),
-  email: varchar("email", { length: 320 }),
-  loginMethod: varchar("loginMethod", { length: 64 }),
-  role: pgEnum("role", ["user", "admin"])("role").default("user").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
-  lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
-});
+export const users = pgTable("Users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: varchar("name", { length: 255 }),
+  email: varchar("email", { length: 255 }),
+  active: boolean("active").default(true),
+  passwordHash: varchar("passwordHash", { length: 255 }),
+  username: varchar("username", { length: 255 }),
+  createdAt: timestamp("createdAt", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt", { withTimezone: true }).defaultNow().notNull(),
+  telefone: text("telefone"),
+  cpf: text("cpf"),
+  endereco: text("endereco"),
+}, (table) => ({
+  emailIdx: index("Users_email_idx").on(table.email),
+}));
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
