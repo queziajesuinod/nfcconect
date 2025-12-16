@@ -1,0 +1,51 @@
+# Traefik Dynamic Configuration
+
+# Middlewares
+http:
+  middlewares:
+    # Middleware de redirecionamento HTTPS
+    https-redirect:
+      redirectScheme:
+        scheme: https
+        permanent: true
+
+    # Middleware de headers de segurança
+    security-headers:
+      headers:
+        accessControlAllowOriginList:
+          - "*"
+        accessControlMaxAge: 100
+        addVaryHeader: true
+        browserXssFilter: true
+        contentTypeNosniff: true
+        forceSTSHeader: true
+        frameDeny: true
+        stsIncludeSubdomains: true
+        stsMaxAge: 63072000
+        stsPreload: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+        permissionsPolicy: "geolocation=(), microphone=(), camera=()"
+
+    # Middleware de compressão
+    compression:
+      compress:
+        minResponseBodyBytes: 1000
+
+    # Middleware de rate limiting
+    rate-limit:
+      rateLimit:
+        average: 100
+        burst: 50
+        period: 1s
+
+    # Middleware de autenticação básica para admin
+    admin-auth:
+      basicAuth:
+        users:
+          - "admin:$apr1$H6uskkkW$IgstNWde3R9t7gLhNOHO91"  # Mude a senha!
+
+  # Routers customizados podem ser adicionados aqui se necessário
+  routers: {}
+
+  # Services customizados podem ser adicionados aqui se necessário
+  services: {}

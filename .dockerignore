@@ -1,0 +1,54 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Node
+node_modules
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+pnpm-debug.log
+
+# Build
+dist
+build
+.next
+out
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Documentation
+README.md
+DEPLOY_GUIDE.md
+DOCKER_DEPLOYMENT.md
+POSTGRESQL_SETUP.md
+*.md
+
+# Testing
+.vitest
+coverage
+*.test.ts
+
+# Misc
+.cache
+.turbo
+backups
+data
+traefik/acme.json

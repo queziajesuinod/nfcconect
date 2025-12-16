@@ -1,0 +1,60 @@
+# Traefik Configuration File
+
+# Global settings
+global:
+  checkNewVersion: true
+  sendAnonymousUsage: false
+
+# Entrypoints
+entryPoints:
+  http:
+    address: ":80"
+    http:
+      redirections:
+        entrypoint:
+          regex: "^http://(.*)$"
+          replacement: "https://$1"
+          permanent: true
+  https:
+    address: ":443"
+    http:
+      tls:
+        certResolver: letsencrypt
+
+# API and Dashboard
+api:
+  dashboard: true
+  debug: false
+
+# Providers
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: nfc_network
+  file:
+    filename: /config.yml
+    watch: true
+
+# Certificate Resolvers
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: ${CF_API_EMAIL:-admin@example.com}
+      storage: acme.json
+      httpChallenge:
+        entryPoint: http
+      # Descomente para usar DNS challenge com Cloudflare
+      # dnsChallenge:
+      #   provider: cloudflare
+      #   resolvers:
+      #     - "1.1.1.1:53"
+      #     - "8.8.8.8:53"
+
+# Logging
+log:
+  level: INFO
+  filePath: /var/log/traefik/traefik.log
+
+accessLog:
+  filePath: /var/log/traefik/access.log

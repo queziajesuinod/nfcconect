@@ -105,3 +105,10 @@ temp/
 *.db
 *.sqlite
 *.sqlite3
+
+# Docker
+traefik/acme.json
+data/
+backups/
+.env.production
+docker-compose.override.yml

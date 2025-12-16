@@ -85,8 +85,13 @@
 - [x] Criar arquivo .env.example (via webdev_request_secrets)
 - [x] Documentacao de deploy (DEPLOY_GUIDE.md)
 - [x] Documentacao PostgreSQL (POSTGRESQL_SETUP.md)
-- [ ] Criar Dockerfile para producao
-- [ ] Criar docker-compose.yml com Traefik
+- [x] Criar Dockerfile para producao (multi-stage)
+- [x] Criar docker-compose.yml com Traefik, PostgreSQL, pgAdmin
+- [x] Criar arquivo .env.production.example
+- [x] Criar scripts de backup/restore
+- [x] Criar documentacao Docker (DOCKER_DEPLOYMENT.md)
+- [x] Criar arquivo .dockerignore
+- [x] Atualizar .gitignore com Docker
 
 ## Múltiplos Usuários por Tag
 - [x] Adicionar campo deviceId no schema de nfcUsers
