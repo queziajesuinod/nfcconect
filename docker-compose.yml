@@ -1,20 +1,12 @@
-version: '3.8'
+version: "3.9"
 
 services:
-  # Traefik - Reverse Proxy com HTTPS automático# NFC Management Application
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: nfc_app
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
+  nfcconecta:
+    image: nfc_conect:latest
     environment:
       NODE_ENV: production
-      PORT: 3000
-      DATABASE_URL: postgresql://${DB_USER:-nfc_user}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-nfc_management}
+      PORT: 3008
+      DATABASE_URL: postgresql://root:kZ7oYab65fQITbyPPV6CLgrL5NIONpwZ@62.72.63.137:5432/iecg_bd
       
       # Manus OAuth
       VITE_APP_ID: ${VITE_APP_ID}
@@ -41,30 +33,39 @@ services:
       # App Config
       VITE_APP_TITLE: ${VITE_APP_TITLE:-Sistema de Gerenciamento de Gravações NFC}
       VITE_APP_LOGO: ${VITE_APP_LOGO:-/logo.png}
-    
-    volumes:
-      - ./data:/app/data
+      REGISTRATION_SECRET: "excelencia"
+      VITE_REGISTRATION_SECRET: "excelencia"
+      
     networks:
-      - nfc_network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.app.entrypoints=http,https"
-      - "traefik.http.routers.app.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.app.service=app"
-      - "traefik.http.services.app.loadbalancer.server.port=3000"
-      - "traefik.http.routers.app.middlewares=https-redirect"
-      - "traefik.http.middlewares.https-redirect.redirectscheme.scheme=https"
-      - "traefik.http.routers.app-secure.entrypoints=https"
-      - "traefik.http.routers.app-secure.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.app-secure.service=app"
-      - "traefik.http.routers.app-secure.tls=true"
-      - "traefik.http.routers.app-secure.tls.certresolver=letsencrypt"
-      - "traefik.http.middlewares.app-headers.headers.accesscontrolalloworiginlist=${DOMAIN}"
-      - "traefik.http.middlewares.app-headers.headers.accesscontrolmaxage=100"
-      - "traefik.http.middlewares.app-headers.headers.addvaryheader=true"
+      - network_public
 
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=network_public"
+      
+        # 🔹 API backend: https://conecta.iecg.com.br
+        - "traefik.http.routers.nfcconecta.rule=Host(`conecta.iecg.com.br`)"
+        - "traefik.http.routers.nfcconecta.entrypoints=websecure"
+      
+        # habilita TLS e usa o resolver CERTO
+        - "traefik.http.routers.nfcconecta.tls=true"
+        - "traefik.http.routers.nfcconecta.tls.certresolver=letsencryptresolver"
+      
+        # service lógico visto pelo Traefik
+        - "traefik.http.routers.nfcconecta.service=nfcconecta"
+        - "traefik.http.services.nfcconecta.loadbalancer.server.port=3008"
 
 
 networks:
-  nfc_network:
-    driver: bridge
+  network_public:
+    external: true
