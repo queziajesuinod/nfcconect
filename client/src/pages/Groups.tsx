@@ -22,8 +22,13 @@ export function Groups() {
     redirectUrl: '',
     color: '#3B82F6',
   });
-
-  const { data: groups = [], isLoading, refetch } = trpc.groups.list.useQuery();
+  const utils = trpc.useUtils();
+  const [page, setPage] = useState(1);
+  const pageSize = 6;
+  const { data: groupsPage, isLoading } = trpc.groups.list.useQuery({ page, pageSize });
+  const groups = groupsPage?.items || [];
+  const totalGroups = groupsPage?.total ?? 0;
+  const totalPages = groupsPage?.totalPages ?? 1;
   const createMutation = trpc.groups.create.useMutation();
   const updateMutation = trpc.groups.update.useMutation();
   const deleteMutation = trpc.groups.delete.useMutation();
@@ -44,7 +49,8 @@ export function Groups() {
       toast.success('Grupo criado com sucesso');
       setFormData({ name: '', description: '', redirectUrl: '', color: '#3B82F6' });
       setIsCreateOpen(false);
-      refetch();
+      setPage(1);
+      utils.groups.list.invalidate({ page: 1, pageSize });
     } catch (error) {
       toast.error('Erro ao criar grupo');
     }
@@ -67,7 +73,7 @@ export function Groups() {
       toast.success('Grupo atualizado com sucesso');
       setEditingId(null);
       setFormData({ name: '', description: '', redirectUrl: '', color: '#3B82F6' });
-      refetch();
+      utils.groups.list.invalidate({ page, pageSize });
     } catch (error) {
       toast.error('Erro ao atualizar grupo');
     }
@@ -79,7 +85,7 @@ export function Groups() {
     try {
       await deleteMutation.mutateAsync({ id });
       toast.success('Grupo deletado com sucesso');
-      refetch();
+      utils.groups.list.invalidate({ page, pageSize });
     } catch (error) {
       toast.error('Erro ao deletar grupo');
     }
@@ -195,79 +201,104 @@ export function Groups() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4">
-            {groups.map((group: any) => (
-              <Card key={group.id}>
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="w-4 h-4 rounded"
-                        style={{ backgroundColor: group.color }}
-                      />
+          <>
+            <div className="grid gap-4">
+              {groups.map((group: any) => (
+                <Card key={group.id}>
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-4 h-4 rounded"
+                          style={{ backgroundColor: group.color }}
+                        />
+                        <div>
+                          <CardTitle>{group.name}</CardTitle>
+                          {group.description && (
+                            <CardDescription>{group.description}</CardDescription>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => navigate(`/dashboard/groups/${group.id}`)}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openEditDialog(group)}
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(group.id)}
+                        >
+                          <Trash2 className="w-4 h-4 text-red-500" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-3 gap-4 mb-4">
                       <div>
-                        <CardTitle>{group.name}</CardTitle>
-                        {group.description && (
-                          <CardDescription>{group.description}</CardDescription>
-                        )}
+                        <div className="text-2xl font-bold">{group.totalUsers}</div>
+                        <div className="text-sm text-gray-600 flex items-center gap-1">
+                          <Users className="w-4 h-4" />
+                          Usuários
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-bold">{group.totalSchedules}</div>
+                        <div className="text-sm text-gray-600 flex items-center gap-1">
+                          <Calendar className="w-4 h-4" />
+                          Agendamentos
+                        </div>
+                      </div>
+                      <div>
+                        <Badge variant={group.isActive ? 'default' : 'secondary'}>
+                          {group.isActive ? 'Ativo' : 'Inativo'}
+                        </Badge>
                       </div>
                     </div>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => navigate(`/dashboard/groups/${group.id}`)}
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openEditDialog(group)}
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(group.id)}
-                      >
-                        <Trash2 className="w-4 h-4 text-red-500" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-3 gap-4 mb-4">
-                    <div>
-                      <div className="text-2xl font-bold">{group.totalUsers}</div>
-                      <div className="text-sm text-gray-600 flex items-center gap-1">
-                        <Users className="w-4 h-4" />
-                        Usuários
+                    {group.redirectUrl && (
+                      <div className="text-sm text-gray-600 break-all">
+                        <strong>URL:</strong> {group.redirectUrl}
                       </div>
-                    </div>
-                    <div>
-                      <div className="text-2xl font-bold">{group.totalSchedules}</div>
-                      <div className="text-sm text-gray-600 flex items-center gap-1">
-                        <Calendar className="w-4 h-4" />
-                        Agendamentos
-                      </div>
-                    </div>
-                    <div>
-                      <Badge variant={group.isActive ? 'default' : 'secondary'}>
-                        {group.isActive ? 'Ativo' : 'Inativo'}
-                      </Badge>
-                    </div>
-                  </div>
-                  {group.redirectUrl && (
-                    <div className="text-sm text-gray-600 break-all">
-                      <strong>URL:</strong> {group.redirectUrl}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            <div className="flex items-center justify-between mt-4">
+              <p className="text-sm text-gray-600">
+                Página {page} de {totalPages} · {totalGroups} grupo(s)
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+                  disabled={page <= 1}
+                >
+                  Anterior
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((prev) => Math.min(prev + 1, totalPages))}
+                  disabled={page >= totalPages}
+                >
+                  Próxima
+                </Button>
+              </div>
+            </div>
+          </>
         )}
       </div>
     </DashboardLayout>

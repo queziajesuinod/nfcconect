@@ -7,7 +7,7 @@ import { z } from "zod";
 import { nanoid } from "nanoid";
 import { TRPCError } from "@trpc/server";
 import {
-  createNfcTag, getNfcTagByUid, getNfcTagById, getAllNfcTags, updateNfcTag, deleteNfcTag,
+  createNfcTag, getNfcTagByUid, getNfcTagById, getAllNfcTags, getNfcTagsPaginated, updateNfcTag, deleteNfcTag,
   createNfcUser, getNfcUserByDeviceId, getNfcUserById, getAllNfcUsers, updateNfcUser, validateNfcUser, deleteNfcUser,
   getUserTagRelation, createUserTagRelation, updateUserTagRelation, getAllNfcUsersByTagId, getTagsByUserId,
   createConnectionLog, getConnectionLogs, getConnectionLogsByTagId, getConnectionLogsByUserId,
@@ -17,12 +17,12 @@ import {
   createCheckinSchedule, getCheckinScheduleById, getCheckinSchedulesByTagId, getAllCheckinSchedules, getActiveSchedulesForDay, updateCheckinSchedule, deleteCheckinSchedule,
   createAutomaticCheckin, getAllAutomaticCheckins, getAutomaticCheckinsByScheduleId, updateAutomaticCheckinStatus, hasUserCheckinForScheduleToday,
   createUserLocationUpdate, getLatestUserLocation, getUsersWithRecentLocation, getUsersByTagIdWithRecentLocation,
-  getScheduleTagRelations, addScheduleTagRelation, removeScheduleTagRelation, setScheduleTagRelations, getAllCheckinSchedulesWithTags, getActiveSchedulesForDayWithTags,
-  getAllUnifiedCheckins, hasUserCheckinForTagToday, getActiveScheduleForTag, getUnifiedCheckinStats,
+  getScheduleTagRelations, addScheduleTagRelation, removeScheduleTagRelation, setScheduleTagRelations, getAllCheckinSchedulesWithTags, getCheckinSchedulesWithTagsPaginated, getActiveSchedulesForDayWithTags,
+  getUnifiedCheckinsPaginated, hasUserCheckinForTagToday, getActiveScheduleForTag, getUnifiedCheckinStats,
   getTodayCheckinsForActiveSchedules,
   createNotificationGroup, getAllNotificationGroups, getNotificationGroupById, updateNotificationGroup, deleteNotificationGroup,
   addScheduleToGroup, removeScheduleFromGroup, getGroupSchedules, getScheduleGroups,
-  addUserToGroup, removeUserFromGroup, getGroupUsers, getUserGroups, getGroupStats, getAllGroupsWithStats,
+  addUserToGroup, removeUserFromGroup, getGroupUsers, getUserGroups, getGroupStats, getAllGroupsWithStats, getGroupsWithStatsPaginated,
   autoAddUserToScheduleGroups, getGroupRedirectUrlForUser
 } from "./db";
 
@@ -61,9 +61,15 @@ export const appRouter = router({
 
   // ============ NFC TAG ROUTES ============
   tags: router({
-    list: adminProcedure.query(async () => {
-      return getAllNfcTags();
-    }),
+    list: adminProcedure
+      .input(z.object({
+        page: z.number().min(1).default(1),
+        pageSize: z.number().min(1).max(100).default(25),
+      }).optional())
+      .query(async ({ input }) => {
+        const { page = 1, pageSize = 25 } = input || {};
+        return getNfcTagsPaginated(page, pageSize);
+      }),
 
     getById: adminProcedure
       .input(z.object({ id: z.number() }))
@@ -526,9 +532,13 @@ export const appRouter = router({
 
     // Admin: list all check-ins (unified manual + automatic)
     list: adminProcedure
-      .input(z.object({ limit: z.number().optional() }).optional())
+      .input(z.object({
+        page: z.number().min(1).default(1),
+        pageSize: z.number().min(1).max(100).default(25),
+      }).optional())
       .query(async ({ input }) => {
-        return getAllUnifiedCheckins(input?.limit || 100);
+        const { page = 1, pageSize = 25 } = input || {};
+        return getUnifiedCheckinsPaginated(page, pageSize);
       }),
 
     // Admin: check-ins by tag
@@ -669,9 +679,15 @@ export const appRouter = router({
   // ============ CHECK-IN SCHEDULE ROUTES ============
   schedules: router({
     // Admin: list all schedules with their tags
-    list: adminProcedure.query(async () => {
-      return getAllCheckinSchedulesWithTags();
-    }),
+    list: adminProcedure
+      .input(z.object({
+        page: z.number().min(1).default(1),
+        pageSize: z.number().min(1).max(50).default(25),
+      }).optional())
+      .query(async ({ input }) => {
+        const { page = 1, pageSize = 25 } = input || {};
+        return getCheckinSchedulesWithTagsPaginated(page, pageSize);
+      }),
 
     // Admin: get schedule by ID
     byId: adminProcedure
@@ -1016,9 +1032,15 @@ export const appRouter = router({
   }),
 
   groups: router({
-    list: adminProcedure.query(async () => {
-      return getAllGroupsWithStats();
-    }),
+    list: adminProcedure
+      .input(z.object({
+        page: z.number().min(1).default(1),
+        pageSize: z.number().min(1).max(50).default(25),
+      }).optional())
+      .query(async ({ input }) => {
+        const { page = 1, pageSize = 25 } = input || {};
+        return getGroupsWithStatsPaginated(page, pageSize);
+      }),
 
     byId: adminProcedure
       .input(z.object({ id: z.number() }))

@@ -194,6 +194,21 @@ export async function getAllNfcTags() {
   return db.select().from(nfcTags).orderBy(desc(nfcTags.createdAt));
 }
 
+export async function getNfcTagsPaginated(page = 1, pageSize = 25) {
+  const db = await getDb();
+  if (!db) {
+    return { items: [], total: 0 };
+  }
+  const offset = Math.max((page - 1) * pageSize, 0);
+  const [countResult] = await db.select({ count: sql<number>`count(*)` }).from(nfcTags);
+  const items = await db.select().from(nfcTags)
+    .orderBy(desc(nfcTags.createdAt))
+    .limit(pageSize)
+    .offset(offset);
+  const total = Number(countResult?.count || 0);
+  return { items, total };
+}
+
 export async function updateNfcTag(id: number, data: Partial<InsertNfcTag>) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -970,6 +985,78 @@ export async function getAllCheckinSchedulesWithTags() {
   return schedulesWithTags;
 }
 
+export async function getCheckinSchedulesWithTagsPaginated(page = 1, pageSize = 25) {
+  const db = await getDb();
+  if (!db) {
+    return { items: [], total: 0, page, pageSize, totalPages: 1 };
+  }
+
+  const offset = Math.max((page - 1) * pageSize, 0);
+  const totalResult = await db.select({ count: sql<number>`count(*)` }).from(checkinSchedules);
+  const total = Number(totalResult[0]?.count || 0);
+
+  const schedules = await db.select({
+    id: checkinSchedules.id,
+    tagId: checkinSchedules.tagId,
+    name: checkinSchedules.name,
+    description: checkinSchedules.description,
+    daysOfWeek: checkinSchedules.daysOfWeek,
+    startTime: checkinSchedules.startTime,
+    endTime: checkinSchedules.endTime,
+    isActive: checkinSchedules.isActive,
+    timezone: checkinSchedules.timezone,
+    createdAt: checkinSchedules.createdAt,
+    updatedAt: checkinSchedules.updatedAt,
+  })
+    .from(checkinSchedules)
+    .orderBy(desc(checkinSchedules.createdAt))
+    .limit(pageSize)
+    .offset(offset);
+
+  const schedulesWithTags = await Promise.all(schedules.map(async (schedule) => {
+    const tagRelations = await getScheduleTagRelations(schedule.id);
+
+    let tags = tagRelations.map(r => ({
+      id: r.tagId,
+      uid: r.tagUid,
+      name: r.tagName,
+      latitude: r.tagLatitude,
+      longitude: r.tagLongitude,
+      radiusMeters: r.tagRadiusMeters,
+    }));
+
+    if (tags.length === 0 && schedule.tagId) {
+      const [legacyTag] = await db.select().from(nfcTags).where(eq(nfcTags.id, schedule.tagId)).limit(1);
+      if (legacyTag) {
+        tags = [{
+          id: legacyTag.id,
+          uid: legacyTag.uid,
+          name: legacyTag.name,
+          latitude: legacyTag.latitude,
+          longitude: legacyTag.longitude,
+          radiusMeters: legacyTag.radiusMeters,
+        }];
+      }
+    }
+
+    return {
+      ...schedule,
+      tags,
+      tag: tags.length > 0 ? { uid: tags[0].uid, name: tags[0].name } : null,
+    };
+  }));
+
+  const totalPages = total === 0 ? 1 : Math.max(1, Math.ceil(total / pageSize));
+
+  return {
+    items: schedulesWithTags,
+    total,
+    page,
+    pageSize,
+    totalPages,
+  };
+}
+
 export async function getActiveSchedulesForDayWithTags(dayOfWeek: number) {
   const db = await getDb();
   if (!db) return [];
@@ -1096,6 +1183,85 @@ export async function getAllUnifiedCheckins(limit: number = 100) {
     .slice(0, limit);
   
   return allCheckins;
+}
+
+export async function getUnifiedCheckinsPaginated(page = 1, pageSize = 25) {
+  const db = await getDb();
+  if (!db) {
+    return { items: [], total: 0, page, pageSize, totalPages: 1 };
+  }
+
+  const offset = Math.max((page - 1) * pageSize, 0);
+  const fetchLimit = Math.max(page * pageSize, pageSize);
+
+  const autoCheckins = await db.select({
+    id: automaticCheckins.id,
+    type: sql<string>`'automatic'`.as('type'),
+    nfcUserId: automaticCheckins.nfcUserId,
+    tagId: automaticCheckins.tagId,
+    scheduleId: automaticCheckins.scheduleId,
+    distanceMeters: automaticCheckins.distanceMeters,
+    isWithinRadius: automaticCheckins.isWithinRadius,
+    latitude: automaticCheckins.userLatitude,
+    longitude: automaticCheckins.userLongitude,
+    createdAt: automaticCheckins.createdAt,
+    userName: nfcUsers.name,
+    userEmail: nfcUsers.email,
+    tagUid: nfcTags.uid,
+    tagName: nfcTags.name,
+    scheduleName: checkinSchedules.name,
+    scheduleStartTime: checkinSchedules.startTime,
+    scheduleEndTime: checkinSchedules.endTime,
+  })
+    .from(automaticCheckins)
+    .leftJoin(nfcUsers, eq(automaticCheckins.nfcUserId, nfcUsers.id))
+    .leftJoin(nfcTags, eq(automaticCheckins.tagId, nfcTags.id))
+    .leftJoin(checkinSchedules, eq(automaticCheckins.scheduleId, checkinSchedules.id))
+    .orderBy(desc(automaticCheckins.createdAt))
+    .limit(fetchLimit);
+
+  const manualCheckins = await db.select({
+    id: checkins.id,
+    type: sql<string>`'manual'`.as('type'),
+    nfcUserId: checkins.nfcUserId,
+    tagId: checkins.tagId,
+    scheduleId: sql<number | null>`NULL`.as('scheduleId'),
+    distanceMeters: checkins.distanceMeters,
+    isWithinRadius: checkins.isWithinRadius,
+    latitude: checkins.latitude,
+    longitude: checkins.longitude,
+    createdAt: checkins.createdAt,
+    userName: nfcUsers.name,
+    userEmail: nfcUsers.email,
+    tagUid: nfcTags.uid,
+    tagName: nfcTags.name,
+    scheduleName: sql<string | null>`NULL`.as('scheduleName'),
+    scheduleStartTime: sql<string | null>`NULL`.as('scheduleStartTime'),
+    scheduleEndTime: sql<string | null>`NULL`.as('scheduleEndTime'),
+  })
+    .from(checkins)
+    .leftJoin(nfcUsers, eq(checkins.nfcUserId, nfcUsers.id))
+    .leftJoin(nfcTags, eq(checkins.tagId, nfcTags.id))
+    .orderBy(desc(checkins.createdAt))
+    .limit(fetchLimit);
+
+  const [autoCountResult] = await db.select({ count: sql<number>`count(*)` }).from(automaticCheckins);
+  const [manualCountResult] = await db.select({ count: sql<number>`count(*)` }).from(checkins);
+  const total = Number(autoCountResult?.count || 0) + Number(manualCountResult?.count || 0);
+
+  const allCheckins = [...autoCheckins, ...manualCheckins]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  const items = allCheckins.slice(offset, offset + pageSize);
+  const totalPages = total === 0 ? 1 : Math.max(1, Math.ceil(total / pageSize));
+
+  return {
+    items,
+    total,
+    page,
+    pageSize,
+    totalPages,
+  };
 }
 
 // Check if user already has any check-in (manual or automatic) for a tag today
@@ -1434,6 +1600,10 @@ export async function addScheduleToGroup(groupId: number, scheduleId: number) {
   if (existing.length > 0) return existing[0].id;
   
   const result = await db.insert(groupScheduleRelations).values({ groupId, scheduleId }).returning({ id: groupScheduleRelations.id });
+  const userIds = await findUsersCheckedInSchedule(scheduleId);
+  for (const userId of userIds) {
+    await addUserToGroup(groupId, userId, 'auto', scheduleId);
+  }
   return result[0].id;
 }
 
@@ -1445,6 +1615,12 @@ export async function removeScheduleFromGroup(groupId: number, scheduleId: numbe
     and(
       eq(groupScheduleRelations.groupId, groupId),
       eq(groupScheduleRelations.scheduleId, scheduleId)
+    )
+  );
+  await db.delete(groupUserRelations).where(
+    and(
+      eq(groupUserRelations.groupId, groupId),
+      eq(groupUserRelations.sourceScheduleId, scheduleId)
     )
   );
 }
@@ -1485,6 +1661,20 @@ export async function getScheduleGroups(scheduleId: number) {
     .where(eq(groupScheduleRelations.scheduleId, scheduleId));
   
   return relations;
+}
+
+export async function findUsersCheckedInSchedule(scheduleId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const rows = await db.select({
+    userId: automaticCheckins.nfcUserId,
+  })
+    .distinct()
+    .from(automaticCheckins)
+    .where(eq(automaticCheckins.scheduleId, scheduleId));
+
+  return rows.map((row) => row.userId);
 }
 
 // ============ GROUP-USER RELATIONS ============
@@ -1597,6 +1787,50 @@ export async function getAllGroupsWithStats() {
   }));
   
   return groupsWithStats;
+}
+
+export async function getGroupsWithStatsPaginated(page = 1, pageSize = 25) {
+  const db = await getDb();
+  if (!db) {
+    return { items: [], total: 0, page, pageSize, totalPages: 1 };
+  }
+
+  const offset = Math.max((page - 1) * pageSize, 0);
+  const totalResult = await db.select({ count: sql<number>`count(*)` }).from(notificationGroups);
+  const total = Number(totalResult[0]?.count || 0);
+
+  const groups = await db.select({
+    id: notificationGroups.id,
+    name: notificationGroups.name,
+    description: notificationGroups.description,
+    redirectUrl: notificationGroups.redirectUrl,
+    color: notificationGroups.color,
+    isActive: notificationGroups.isActive,
+    createdAt: notificationGroups.createdAt,
+    updatedAt: notificationGroups.updatedAt,
+  })
+    .from(notificationGroups)
+    .orderBy(desc(notificationGroups.createdAt))
+    .limit(pageSize)
+    .offset(offset);
+
+  const groupsWithStats = await Promise.all(groups.map(async (group) => {
+    const stats = await getGroupStats(group.id);
+    return {
+      ...group,
+      ...stats,
+    };
+  }));
+
+  const totalPages = total === 0 ? 1 : Math.max(1, Math.ceil(total / pageSize));
+
+  return {
+    items: groupsWithStats,
+    total,
+    page,
+    pageSize,
+    totalPages,
+  };
 }
 
 // Auto-add user to groups linked to a schedule (called on check-in)

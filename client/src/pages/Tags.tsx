@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { trpc } from "@/lib/trpc";
 import { Plus, Pencil, Trash2, Nfc, ExternalLink, Copy, QrCode, MapPin, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 
 type TagStatus = "active" | "inactive" | "blocked";
@@ -46,11 +46,10 @@ interface TagFormData {
   enableCheckin: boolean;
 }
 
-const initialFormData: TagFormData = {
-  uid: "",
+const BASE_FORM_VALUES = {
   name: "",
   description: "",
-  status: "active",
+  status: "active" as TagStatus,
   redirectUrl: "",
   latitude: "",
   longitude: "",
@@ -58,26 +57,55 @@ const initialFormData: TagFormData = {
   enableCheckin: false,
 };
 
+const buildDatePrefix = () => {
+  const now = new Date();
+  const pad = (value: number) => value.toString().padStart(2, "0");
+  const year = now.getFullYear();
+  const month = pad(now.getMonth() + 1);
+  const day = pad(now.getDate());
+  const hours = pad(now.getHours());
+  const minutes = pad(now.getMinutes());
+  const seconds = pad(now.getSeconds());
+  return `${year}${month}${day}${hours}${minutes}${seconds}`;
+};
+
+const buildDefaultUid = () => `TAGIECG${buildDatePrefix()}`;
+const createDefaultFormData = (): TagFormData => ({
+  uid: buildDefaultUid(),
+  ...BASE_FORM_VALUES,
+});
+
 export default function Tags() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isQrOpen, setIsQrOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
-  const [formData, setFormData] = useState<TagFormData>(initialFormData);
+  const [formData, setFormData] = useState<TagFormData>(createDefaultFormData());
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
   const [editId, setEditId] = useState<number | null>(null);
   const [selectedTagUrl, setSelectedTagUrl] = useState<string>("");
   const [selectedTagName, setSelectedTagName] = useState<string>("");
   const [isGettingLocation, setIsGettingLocation] = useState(false);
 
   const utils = trpc.useUtils();
-  const { data: tags, isLoading } = trpc.tags.list.useQuery();
+  const { data: tagsData, isLoading } = trpc.tags.list.useQuery({ page, pageSize });
+  const totalPages = tagsData?.totalPages ?? 1;
+  const totalTags = tagsData?.total ?? 0;
+  const tags = tagsData?.items ?? [];
+  useEffect(() => {
+    if (page > totalPages && totalPages > 0) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
 
   const createMutation = trpc.tags.create.useMutation({
     onSuccess: () => {
-      utils.tags.list.invalidate();
+      setPage(1);
+      utils.tags.list.invalidate({ page: 1, pageSize });
       utils.stats.overview.invalidate();
       setIsCreateOpen(false);
-      setFormData(initialFormData);
+      setFormData(createDefaultFormData());
       toast.success("Tag criada com sucesso!");
     },
     onError: (error) => {
@@ -87,9 +115,9 @@ export default function Tags() {
 
   const updateMutation = trpc.tags.update.useMutation({
     onSuccess: () => {
-      utils.tags.list.invalidate();
+      utils.tags.list.invalidate({ page, pageSize });
       setIsEditOpen(false);
-      setFormData(initialFormData);
+      setFormData(createDefaultFormData());
       setEditId(null);
       toast.success("Tag atualizada com sucesso!");
     },
@@ -100,8 +128,8 @@ export default function Tags() {
 
   const deleteMutation = trpc.tags.delete.useMutation({
     onSuccess: () => {
-      utils.tags.list.invalidate();
       utils.stats.overview.invalidate();
+      utils.tags.list.invalidate({ page, pageSize });
       setDeleteId(null);
       toast.success("Tag excluída com sucesso!");
     },
@@ -144,6 +172,42 @@ export default function Tags() {
     setIsEditOpen(true);
   };
 
+  const getNextCloneIndex = (values: string[], prefix: string) => {
+    let maxIndex = 0;
+    values.forEach((value) => {
+      if (!value?.startsWith(prefix)) return;
+      const remainder = value.slice(prefix.length);
+      const match = remainder.match(/^(\d+)/);
+      if (match) {
+        const parsed = parseInt(match[1], 10);
+        if (!Number.isNaN(parsed)) {
+          maxIndex = Math.max(maxIndex, parsed);
+        }
+      }
+    });
+    return maxIndex + 1;
+  };
+
+  const handleClone = (tag: NonNullable<typeof tags>[0]) => {
+    const baseName = tag.name || tag.uid;
+    const namePrefix = `${baseName} (copy `;
+    const nextNameIndex = getNextCloneIndex(tags.map((t) => t.name || ""), namePrefix);
+    const cloneName = `${baseName} (copy ${nextNameIndex})`;
+    const cloneUid = buildDefaultUid();
+
+    createMutation.mutate({
+      uid: cloneUid,
+      name: cloneName,
+      description: tag.description || undefined,
+      status: tag.status,
+      redirectUrl: tag.redirectUrl || undefined,
+      latitude: tag.latitude || undefined,
+      longitude: tag.longitude || undefined,
+      radiusMeters: tag.radiusMeters || undefined,
+      enableCheckin: tag.enableCheckin,
+    });
+  };
+
   const handleUpdate = () => {
     if (!editId) return;
     updateMutation.mutate({
@@ -160,25 +224,60 @@ export default function Tags() {
   };
 
   // Get current location
-  const getCurrentLocation = () => {
+  const fetchIpLocation = async (reason?: string) => {
+    console.log("[Tags] fetchIpLocation reason:", reason);
+    try {
+      const response = await fetch("https://ipapi.co/json/");
+      if (!response.ok) {
+        throw new Error("IP geolocation request failed");
+      }
+      const data = await response.json();
+      if (!data.latitude || !data.longitude) {
+        throw new Error("Não foi possível obter coordenadas via IP");
+      }
+      console.log("[Tags] IP location result:", data);
+      setFormData((prev) => ({
+        ...prev,
+        latitude: data.latitude.toString(),
+        longitude: data.longitude.toString(),
+      }));
+      if (reason) {
+        toast.info("Localização aproximada obtida via IP");
+      } else {
+        toast.success("Localização obtida via IP");
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Erro desconhecido ao consultar IP";
+      toast.error("Erro ao obter localização: " + message);
+    } finally {
+      setIsGettingLocation(false);
+    }
+  };
+
+    const getCurrentLocation = () => {
+    console.log("[Tags] requesting browser geolocation");
     if (!navigator.geolocation) {
       toast.error("Geolocalização não suportada");
+      fetchIpLocation();
       return;
     }
+
     setIsGettingLocation(true);
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        setFormData({
-          ...formData,
+        console.log("[Tags] browser location success:", position.coords);
+        setFormData((prev) => ({
+          ...prev,
           latitude: position.coords.latitude.toString(),
           longitude: position.coords.longitude.toString(),
-        });
+        }));
         setIsGettingLocation(false);
         toast.success("Localização capturada!");
       },
       (error) => {
-        setIsGettingLocation(false);
+        console.log("[Tags] browser location error:", error);
         toast.error("Erro ao obter localização: " + error.message);
+        fetchIpLocation(error.message);
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
@@ -516,6 +615,16 @@ export default function Tags() {
                     <Button
                       variant="outline"
                       size="sm"
+                      onClick={() => handleClone(tag)}
+                      disabled={createMutation.isPending}
+                      className="border-2 border-black rounded-none font-bold uppercase text-gray-700 hover:bg-gray-200"
+                      title="Clonar Tag"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => setDeleteId(tag.id)}
                       className="border-2 border-black rounded-none font-bold uppercase text-red-600 hover:bg-red-600 hover:text-white"
                     >
@@ -539,6 +648,32 @@ export default function Tags() {
             >
               <Plus className="w-5 h-5 mr-2" /> Criar Tag
             </Button>
+          </div>
+        )}
+
+        {!isLoading && tags.length > 0 && (
+          <div className="flex items-center justify-between mt-4">
+            <p className="text-sm text-gray-600">
+              Página {page} de {totalPages} · {totalTags} tags
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+                disabled={page <= 1}
+              >
+                Anterior
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((prev) => Math.min(prev + 1, totalPages))}
+                disabled={page >= totalPages}
+              >
+                Próxima
+              </Button>
+            </div>
           </div>
         )}
 

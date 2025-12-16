@@ -59,14 +59,22 @@ export default function Schedules() {
   });
 
   const utils = trpc.useUtils();
-  const { data: schedules, isLoading } = trpc.schedules.list.useQuery();
-  const { data: tags } = trpc.tags.list.useQuery();
+  const [page, setPage] = useState(1);
+  const pageSize = 6;
+  const { data: schedulesPage, isLoading } = trpc.schedules.list.useQuery({ page, pageSize });
+  const schedules = schedulesPage?.items || [];
+  const totalSchedules = schedulesPage?.total ?? 0;
+  const totalPages = schedulesPage?.totalPages ?? 1;
+  const { data: tagsPage } = trpc.tags.list.useQuery({ page: 1, pageSize: 1000 });
+  const tags = tagsPage?.items || [];
   const { data: automaticCheckins } = trpc.automaticCheckins.list.useQuery({ limit: 100 });
 
   const createMutation = trpc.schedules.create.useMutation({
     onSuccess: () => {
       toast.success("Agendamento criado com sucesso!");
-      utils.schedules.list.invalidate();
+
+      setPage(1);
+      utils.schedules.list.invalidate({ page: 1, pageSize });
       setIsDialogOpen(false);
       resetForm();
     },
@@ -78,7 +86,7 @@ export default function Schedules() {
   const updateMutation = trpc.schedules.update.useMutation({
     onSuccess: () => {
       toast.success("Agendamento atualizado!");
-      utils.schedules.list.invalidate();
+      utils.schedules.list.invalidate({ page, pageSize });
       setIsEditDialogOpen(false);
       setEditingSchedule(null);
     },
@@ -90,7 +98,7 @@ export default function Schedules() {
   const deleteMutation = trpc.schedules.delete.useMutation({
     onSuccess: () => {
       toast.success("Agendamento excluído!");
-      utils.schedules.list.invalidate();
+      utils.schedules.list.invalidate({ page, pageSize });
     },
     onError: (error) => {
       toast.error(error.message);
@@ -646,63 +654,88 @@ export default function Schedules() {
               <Loader2 className="w-8 h-8 animate-spin" />
             </div>
           ) : schedules && schedules.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {schedules.map((schedule) => (
-                <Card key={schedule.id} className="border-4 border-black">
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg font-black">
-                        {schedule.name || `Agendamento #${schedule.id}`}
-                      </CardTitle>
-                      <Switch
-                        checked={schedule.isActive}
-                        onCheckedChange={(checked) => 
-                          updateMutation.mutate({ id: schedule.id, isActive: checked })
-                        }
-                      />
-                    </div>
-                    <div className="flex items-center gap-1 text-sm text-gray-600">
-                      <Tag className="w-3 h-3" />
-                      <span>{formatTags(schedule.tags)}</span>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4" />
-                        <span className="font-medium">{formatDays(schedule.daysOfWeek)}</span>
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {schedules.map((schedule) => (
+                  <Card key={schedule.id} className="border-4 border-black">
+                    <CardHeader className="pb-2">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-lg font-black">
+                          {schedule.name || `Agendamento #${schedule.id}`}
+                        </CardTitle>
+                        <Switch
+                          checked={schedule.isActive}
+                          onCheckedChange={(checked) => 
+                            updateMutation.mutate({ id: schedule.id, isActive: checked })
+                          }
+                        />
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Clock className="w-4 h-4" />
-                        <span className="font-medium">{schedule.startTime} - {schedule.endTime}</span>
+                      <div className="flex items-center gap-1 text-sm text-gray-600">
+                        <Tag className="w-3 h-3" />
+                        <span>{formatTags(schedule.tags)}</span>
                       </div>
-                      {schedule.description && (
-                        <p className="text-sm text-gray-600">{schedule.description}</p>
-                      )}
-                      <div className="flex gap-2 pt-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="flex-1 border-2 border-black font-bold"
-                          onClick={() => handleEdit(schedule)}
-                        >
-                          <Edit className="w-4 h-4 mr-1" />
-                          EDITAR
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="border-2 border-red-600 text-red-600 hover:bg-red-50"
-                          onClick={() => deleteMutation.mutate({ id: schedule.id })}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-4 h-4" />
+                          <span className="font-medium">{formatDays(schedule.daysOfWeek)}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4" />
+                          <span className="font-medium">{schedule.startTime} - {schedule.endTime}</span>
+                        </div>
+                        {schedule.description && (
+                          <p className="text-sm text-gray-600">{schedule.description}</p>
+                        )}
+                        <div className="flex gap-2 pt-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 border-2 border-black font-bold"
+                            onClick={() => handleEdit(schedule)}
+                          >
+                            <Edit className="w-4 h-4 mr-1" />
+                            EDITAR
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="border-2 border-red-600 text-red-600 hover:bg-red-50"
+                            onClick={() => deleteMutation.mutate({ id: schedule.id })}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+              <div className="flex items-center justify-between mt-4">
+                <p className="text-sm text-gray-600">
+                  Página {page} de {totalPages} · {totalSchedules} agendamento(s)
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+                    disabled={page <= 1}
+                  >
+                    Anterior
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage((prev) => Math.min(prev + 1, totalPages))}
+                    disabled={page >= totalPages}
+                  >
+                    Próxima
+                  </Button>
+                </div>
+              </div>
+            </>
           ) : (
             <Card className="border-4 border-black">
               <CardContent className="py-12 text-center">

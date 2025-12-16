@@ -1,9 +1,16 @@
 import DashboardLayout from "@/components/DashboardLayout";
+import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { MapPin, CheckCircle, XCircle, Clock, User, Nfc, Zap, Hand } from "lucide-react";
+import { useState } from "react";
 
 export default function Checkins() {
-  const { data: checkins, isLoading } = trpc.checkins.list.useQuery({ limit: 100 });
+  const [page, setPage] = useState(1);
+  const pageSize = 25;
+  const { data: checkinsPage, isLoading } = trpc.checkins.list.useQuery({ page, pageSize });
+  const checkins = checkinsPage?.items ?? [];
+  const totalPages = checkinsPage?.totalPages ?? 1;
+  const totalCheckinsCount = checkinsPage?.total ?? 0;
   const { data: stats } = trpc.checkins.stats.useQuery();
 
   const formatDate = (date: Date) => {
@@ -89,6 +96,29 @@ export default function Checkins() {
             </div>
           ) : checkins && checkins.length > 0 ? (
             <div className="space-y-0">
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-sm text-gray-600">
+                  Página {page} de {totalPages} · {totalCheckinsCount} registros
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+                    disabled={page <= 1}
+                  >
+                    Anterior
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage((prev) => Math.min(prev + 1, totalPages))}
+                    disabled={page >= totalPages}
+                  >
+                    Próxima
+                  </Button>
+                </div>
+              </div>
               {checkins.map((checkin, index) => (
                 <div
                   key={`${checkin.type}-${checkin.id}`}

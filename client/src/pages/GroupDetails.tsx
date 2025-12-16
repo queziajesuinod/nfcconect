@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Trash2, Plus, Search, ChevronLeft } from 'lucide-react';
+import { Trash2, Plus, Search, ChevronLeft, UserPlus } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 import { useLocation } from 'wouter';
@@ -22,6 +22,9 @@ export function GroupDetails() {
   const [selectedSchedules, setSelectedSchedules] = useState<Set<number>>(new Set());
   const [searchUsers, setSearchUsers] = useState('');
   const [isAddSchedulesOpen, setIsAddSchedulesOpen] = useState(false);
+  const [isAddUsersOpen, setIsAddUsersOpen] = useState(false);
+  const [searchAvailableUsers, setSearchAvailableUsers] = useState('');
+  const [selectedUsersToAdd, setSelectedUsersToAdd] = useState<Set<number>>(new Set());
 
   const { data: group, isLoading, refetch } = trpc.groups.byId.useQuery(
     { id: groupId! },
@@ -32,6 +35,9 @@ export function GroupDetails() {
     { groupId: groupId! },
     { enabled: !!groupId }
   );
+
+  const { data: availableUsers = [] } = trpc.nfcUsers.list.useQuery();
+  const addUserMutation = trpc.groups.addUser.useMutation();
 
   const bulkRemoveUsersMutation = trpc.groups.bulkRemoveUsers.useMutation();
   const bulkAddSchedulesMutation = trpc.groups.bulkAddSchedules.useMutation();
@@ -44,6 +50,20 @@ export function GroupDetails() {
       u.userEmail?.toLowerCase().includes(searchUsers.toLowerCase())
     );
   }, [group?.users, searchUsers]);
+
+  const addUserCandidates = useMemo(() => {
+    if (!availableUsers || availableUsers.length === 0) return [];
+    const existingIds = new Set(group?.users?.map((user: any) => user.nfcUserId));
+    return availableUsers.filter((user: any) => !existingIds.has(user.id));
+  }, [availableUsers, group?.users]);
+
+  const filteredAvailableUsers = useMemo(() => {
+    if (!addUserCandidates) return [];
+    return addUserCandidates.filter(user =>
+      (user.name || '').toLowerCase().includes(searchAvailableUsers.toLowerCase()) ||
+      (user.email || '').toLowerCase().includes(searchAvailableUsers.toLowerCase())
+    );
+  }, [addUserCandidates, searchAvailableUsers]);
 
   const handleRemoveUsers = async () => {
     if (selectedUsers.size === 0) {
@@ -81,6 +101,28 @@ export function GroupDetails() {
       refetch();
     } catch (error) {
       toast.error('Erro ao adicionar agendamentos');
+    }
+  };
+
+  const handleAddUsers = async () => {
+    if (selectedUsersToAdd.size === 0) {
+      toast.error('Selecione pelo menos um usuário');
+      return;
+    }
+
+    try {
+      for (const userId of selectedUsersToAdd) {
+        await addUserMutation.mutateAsync({
+          groupId: groupId!,
+          nfcUserId: userId,
+        });
+      }
+      toast.success(`${selectedUsersToAdd.size} usuário(s) adicionado(s)`);
+      setSelectedUsersToAdd(new Set());
+      setIsAddUsersOpen(false);
+      refetch();
+    } catch (error) {
+      toast.error('Erro ao adicionar usuários');
     }
   };
 
@@ -298,11 +340,20 @@ export function GroupDetails() {
         {/* Usuários */}
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex items-start justify-between flex-wrap gap-4">
               <div>
                 <CardTitle>Usuários no Grupo</CardTitle>
                 <CardDescription>Usuários que fazem parte deste grupo</CardDescription>
               </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => setIsAddUsersOpen(true)}
+              >
+                <UserPlus className="w-4 h-4" />
+                Adicionar Usuário
+              </Button>
             </div>
             <div className="flex items-center gap-2 mt-4">
               <Search className="w-4 h-4 text-gray-400" />
@@ -357,9 +408,75 @@ export function GroupDetails() {
             )}
           </CardContent>
         </Card>
-      </div>
-    </DashboardLayout>
-  );
+      <Dialog open={isAddUsersOpen} onOpenChange={(open) => {
+        if (!open) {
+          setIsAddUsersOpen(false);
+          setSelectedUsersToAdd(new Set());
+        }
+      }}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Adicionar usuários ao grupo</DialogTitle>
+            <DialogDescription>
+              Selecione usuários existentes para adicioná-los manualmente a este grupo.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center gap-2 mt-4 mb-3">
+            <Search className="w-4 h-4 text-gray-400" />
+            <Input
+              placeholder="Filtrar por nome ou email..."
+              value={searchAvailableUsers}
+              onChange={(e) => setSearchAvailableUsers(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2 max-h-96 overflow-y-auto">
+            {filteredAvailableUsers.length === 0 ? (
+              <p className="text-center text-gray-600 py-8">
+                Nenhum usuário disponível para adicionar
+              </p>
+            ) : (
+              filteredAvailableUsers.map((user: any) => (
+                <div key={user.id} className="flex items-center justify-between p-3 border rounded">
+                  <div>
+                    <div className="font-medium">{user.name || 'Sem nome'}</div>
+                    {user.email && <div className="text-sm text-gray-600">{user.email}</div>}
+                    {user.phone && <div className="text-sm text-gray-600">{user.phone}</div>}
+                  </div>
+                  <Checkbox
+                    checked={selectedUsersToAdd.has(user.id)}
+                    onCheckedChange={(checked) => {
+                      const next = new Set(selectedUsersToAdd);
+                      if (checked) {
+                        next.add(user.id);
+                      } else {
+                        next.delete(user.id);
+                      }
+                      setSelectedUsersToAdd(next);
+                    }}
+                  />
+                </div>
+              ))
+            )}
+          </div>
+          <div className="flex gap-2 justify-end mt-4">
+            <Button variant="outline" onClick={() => {
+              setIsAddUsersOpen(false);
+              setSelectedUsersToAdd(new Set());
+            }}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleAddUsers}
+              disabled={selectedUsersToAdd.size === 0 || addUserMutation.isPending}
+            >
+              Adicionar ({selectedUsersToAdd.size})
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  </DashboardLayout>
+);
 }
 
 export default GroupDetails;

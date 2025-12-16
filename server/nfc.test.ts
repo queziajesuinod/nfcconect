@@ -11,6 +11,13 @@ vi.mock("./db", () => ({
     { id: 1, uid: "TAG-001", name: "Tag 1", status: "active", createdAt: new Date() },
     { id: 2, uid: "TAG-002", name: "Tag 2", status: "inactive", createdAt: new Date() },
   ]),
+  getNfcTagsPaginated: vi.fn().mockResolvedValue({
+    items: [
+      { id: 1, uid: "TAG-001", name: "Tag 1", status: "active", createdAt: new Date() },
+      { id: 2, uid: "TAG-002", name: "Tag 2", status: "inactive", createdAt: new Date() },
+    ],
+    total: 2,
+  }),
   updateNfcTag: vi.fn().mockResolvedValue(undefined),
   deleteNfcTag: vi.fn().mockResolvedValue(undefined),
   createNfcUser: vi.fn().mockResolvedValue({ id: 1 }),
@@ -145,8 +152,8 @@ describe("NFC Tags Router", () => {
 
     const result = await caller.tags.list();
 
-    expect(result).toHaveLength(2);
-    expect(result[0].uid).toBe("TAG-001");
+    expect(result.items).toHaveLength(2);
+    expect(result.items[0].uid).toBe("TAG-001");
   });
 
   it("regular user cannot list tags (forbidden)", async () => {
