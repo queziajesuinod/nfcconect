@@ -20,6 +20,7 @@ import RealtimePanel from "./pages/RealtimePanel";
 import Groups from "./pages/Groups";
 import GroupDetails from "./pages/GroupDetails";
 import { Login } from "./pages/Login";
+import { ProtectedRoute } from "./components/ProtectedRoute";
 
 function Router() {
   return (
@@ -32,16 +33,56 @@ function Router() {
       <Route path="/app" component={UserApp} />
       
       {/* Dashboard Routes (Protected) */}
-      <Route path="/dashboard" component={Dashboard} />
-      <Route path="/dashboard/tags" component={Tags} />
-      <Route path="/dashboard/users" component={Users} />
-      <Route path="/dashboard/logs" component={Logs} />
-      <Route path="/dashboard/links" component={Links} />
-      <Route path="/dashboard/checkins" component={Checkins} />
-      <Route path="/dashboard/schedules" component={Schedules} />
-      <Route path="/dashboard/realtime" component={RealtimePanel} />
-      <Route path="/dashboard/groups" component={Groups} />
-      <Route path="/dashboard/groups/:id" component={GroupDetails} />
+      <Route path="/dashboard">
+        <ProtectedRoute>
+          <Dashboard />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/dashboard/tags">
+        <ProtectedRoute>
+          <Tags />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/dashboard/users">
+        <ProtectedRoute>
+          <Users />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/dashboard/logs">
+        <ProtectedRoute>
+          <Logs />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/dashboard/links">
+        <ProtectedRoute>
+          <Links />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/dashboard/checkins">
+        <ProtectedRoute>
+          <Checkins />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/dashboard/schedules">
+        <ProtectedRoute>
+          <Schedules />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/dashboard/realtime">
+        <ProtectedRoute>
+          <RealtimePanel />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/dashboard/groups">
+        <ProtectedRoute>
+          <Groups />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/dashboard/groups/:id">
+        <ProtectedRoute>
+          <GroupDetails />
+        </ProtectedRoute>
+      </Route>
       
       {/* Fallback */}
       <Route path="/404" component={NotFound} />
