@@ -612,11 +612,11 @@ export default function Links() {
                 ))}
               </datalist>
               <div className="mt-2 flex flex-wrap gap-2">
-                {selectedDeviceIds.map((deviceId) => {
+                {selectedDeviceIds.map((deviceId, index) => {
                   const user = users?.find((u) => u.deviceId === deviceId);
                   return (
                     <span
-                      key={`device-chip-${deviceId}`}
+                      key={`device-chip-${deviceId}-${index}`}
                       className="px-3 py-1 bg-gray-200 rounded-full flex items-center gap-2 text-xs"
                     >
                       {user?.name
@@ -626,7 +626,7 @@ export default function Links() {
                         className="w-4 h-4 flex items-center justify-center text-gray-700"
                         onClick={() =>
                           setSelectedDeviceIds((prev) =>
-                            prev.filter((id) => id !== deviceId)
+                            prev.filter((_, i) => i !== index)
                           )
                         }
                       >
@@ -703,15 +703,15 @@ export default function Links() {
                 ))}
               </datalist>
               <div className="mt-2 flex flex-wrap gap-2">
-                {selectedTagIds.map((tagId) => (
+                {selectedTagIds.map((tagId, index) => (
                   <span
-                    key={`chip-${tagId}`}
+                    key={`chip-${tagId}-${index}`}
                     className="px-3 py-1 bg-gray-200 rounded-full flex items-center gap-2 text-xs"
                   >
                     Tag #{tagId}
                     <button
                       className="w-4 h-4 flex items-center justify-center text-gray-700"
-                      onClick={() => setSelectedTagIds((prev) => prev.filter((id) => id !== tagId))}
+                      onClick={() => setSelectedTagIds((prev) => prev.filter((_, i) => i !== index))}
                     >
                       ✕
                     </button>
