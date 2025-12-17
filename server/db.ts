@@ -644,7 +644,7 @@ export async function getCheckinStats() {
   const today = new Date(now);
   today.setHours(0, 0, 0, 0);
   const [todayCount] = await db.select({ count: sql<number>`count(*)` }).from(checkins)
-    .where(sql`${checkins.createdAt} <= ${now}`);
+    .where(gte(checkins.createdAt, today));
 
   return {
     totalCheckins: Number(total?.count || 0),
@@ -882,7 +882,7 @@ export async function getUsersWithRecentLocation(minutesAgo = 30) {
   })
     .from(userLocationUpdates)
     .leftJoin(nfcUsers, eq(userLocationUpdates.nfcUserId, nfcUsers.id))
-    .where(sql`${userLocationUpdates.createdAt} >= ${cutoffTime}`)
+    .where(gte(userLocationUpdates.createdAt, cutoffTime))
     .orderBy(desc(userLocationUpdates.createdAt));
   
   // Get unique users with their latest location
@@ -916,7 +916,7 @@ export async function getUsersByTagIdWithRecentLocation(tagId: number, minutesAg
       const [latestLocation] = await db.select().from(userLocationUpdates)
         .where(and(
           eq(userLocationUpdates.nfcUserId, user.id),
-          sql`${userLocationUpdates.createdAt} >= ${cutoffTime}`
+          gte(userLocationUpdates.createdAt, cutoffTime)
         ))
         .orderBy(desc(userLocationUpdates.createdAt))
         .limit(1);
