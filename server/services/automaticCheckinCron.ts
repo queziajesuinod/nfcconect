@@ -157,37 +157,42 @@ async function processAllActiveSchedules() {
   const startTime = Date.now();
   const now = getCampoGrandeTime();
   
-  console.log('='.repeat(80));
-  console.log(`[Cron] Starting automatic check-in processing at ${now.toISOString()}`);
-  console.log('='.repeat(80));
-  
   try {
     // Buscar todos os agendamentos ativos
     const activeSchedules = await getActiveCheckinSchedules();
     
+    // Se não há agendamentos ativos, não processar
     if (activeSchedules.length === 0) {
-      console.log('[Cron] No active schedules found');
+      console.log(`[Cron] ${now.toISOString()} - No active schedules, skipping processing`);
       return;
     }
     
-    console.log(`[Cron] Found ${activeSchedules.length} active schedules`);
+    // Verificar se algum agendamento está ativo no momento atual
+    const schedulesActiveNow = activeSchedules.filter(schedule => 
+      isScheduleActive(schedule, now)
+    );
+    
+    if (schedulesActiveNow.length === 0) {
+      console.log(
+        `[Cron] ${now.toISOString()} - ` +
+        `${activeSchedules.length} schedule(s) found but none active at current time, skipping processing`
+      );
+      return;
+    }
+    
+    // Há agendamentos ativos no momento, processar
+    console.log('='.repeat(80));
+    console.log(`[Cron] Starting automatic check-in processing at ${now.toISOString()}`);
+    console.log(`[Cron] ${schedulesActiveNow.length} schedule(s) active at current time`);
+    console.log('='.repeat(80));
     
     let totalProcessed = 0;
     let totalSkipped = 0;
     let totalErrors = 0;
     let schedulesProcessed = 0;
     
-    // Processar cada agendamento
-    for (const schedule of activeSchedules) {
-      // Verificar se o agendamento está ativo no momento atual
-      const isActive = isScheduleActive(schedule, now);
-      
-      if (!isActive) {
-        console.log(
-          `[Cron] Schedule ${schedule.id} (${schedule.name}) is not active at current time, skipping`
-        );
-        continue;
-      }
+    // Processar cada agendamento ativo
+    for (const schedule of schedulesActiveNow) {
       
       const result = await processScheduleCheckins(schedule.id, schedule.name);
       
@@ -201,7 +206,7 @@ async function processAllActiveSchedules() {
     
     console.log('='.repeat(80));
     console.log('[Cron] Automatic check-in processing complete');
-    console.log(`[Cron] Schedules processed: ${schedulesProcessed}/${activeSchedules.length}`);
+    console.log(`[Cron] Schedules processed: ${schedulesProcessed}/${schedulesActiveNow.length}`);
     console.log(`[Cron] Check-ins registered: ${totalProcessed}`);
     console.log(`[Cron] Users skipped: ${totalSkipped}`);
     console.log(`[Cron] Errors: ${totalErrors}`);
