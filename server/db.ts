@@ -1806,7 +1806,7 @@ export async function getUnifiedCheckinStats() {
       count(*)::int as total,
       sum(case when "isWithinRadius" = true then 1 else 0 end)::int as withinRadius,
       sum(case when "isWithinRadius" = false then 1 else 0 end)::int as outsideRadius,
-      sum(case when "createdAt" >= ${today} then 1 else 0 end)::int as today
+      sum(case when "createdAt" >= ${today.toISOString()} then 1 else 0 end)::int as today
     from dev_iecg."automatic_checkins"
   `.then((rows) => rows);
   

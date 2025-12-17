@@ -1,0 +1,157 @@
+diff --git a/server/db.ts b/server/db.ts
+index 112c3c5..8419e38 100644
+--- a/server/db.ts
++++ b/server/db.ts
+@@ -531,23 +531,45 @@ export async function setActiveDeviceLink(entry: {
+     });
+ }
+ 
+-export async function getActiveDeviceLink(deviceId: string) {
++export async function getActiveDeviceLink(deviceId: string, tagId?: number | null) {
+   const db = await getDb();
+   if (!db) return null;
+ 
+   const now = new Date();
+-  const result = await db.select()
++  
++  // Priority 1: Look for specific device + tag activation
++  if (tagId != null) {
++    const specificResult = await db.select()
++      .from(deviceLinkActivations)
++      .where(
++        and(
++          eq(deviceLinkActivations.deviceId, deviceId),
++          eq(deviceLinkActivations.tagId, tagId),
++          gte(deviceLinkActivations.expiresAt, now)
++        )
++      )
++      .orderBy(desc(deviceLinkActivations.createdAt))
++      .limit(1);
++    
++    if (specificResult[0]) {
++      return specificResult[0];
++    }
++  }
++  
++  // Priority 2: Look for global device activation (tagId = null)
++  const globalResult = await db.select()
+     .from(deviceLinkActivations)
+     .where(
+       and(
+         eq(deviceLinkActivations.deviceId, deviceId),
++        sql`${deviceLinkActivations.tagId} is null`,
+         gte(deviceLinkActivations.expiresAt, now)
+       )
+     )
+     .orderBy(desc(deviceLinkActivations.createdAt))
+     .limit(1);
+ 
+-  return result[0] || null;
++  return globalResult[0] || null;
+ }
+ 
+ export async function clearActiveDeviceLink(deviceId: string) {
+diff --git a/server/routers.ts b/server/routers.ts
+index a07d53a..a3fb886 100644
+--- a/server/routers.ts
++++ b/server/routers.ts
+@@ -187,11 +187,16 @@ export const appRouter = router({
+               ipAddress: ctx.req.ip || ctx.req.headers['x-forwarded-for'] as string || null,
+               userAgent: ctx.req.headers['user-agent'] || null,
+             });
++            
++            // Check for active dynamic link (priority: specific tag > global > tag default)
++            const activeLink = await getActiveDeviceLink(input.deviceId, tag.id);
++            const redirectUrl = activeLink?.targetUrl || tag.redirectUrl;
++            
+             return { 
+               exists: true, 
+               tag, 
+               user: existingUser, 
+-              redirectUrl: tag.redirectUrl 
++              redirectUrl
+             };
+           } else {
+             // User exists but not connected to this tag - create relation automatically
+@@ -204,12 +209,17 @@ export const appRouter = router({
+               ipAddress: ctx.req.ip || ctx.req.headers['x-forwarded-for'] as string || null,
+               userAgent: ctx.req.headers['user-agent'] || null,
+             });
++            
++            // Check for active dynamic link (priority: specific tag > global > tag default)
++            const activeLink = await getActiveDeviceLink(input.deviceId, tag.id);
++            const redirectUrl = activeLink?.targetUrl || tag.redirectUrl;
++            
+             // Return as existing user so check-in flow proceeds
+             return { 
+               exists: true, 
+               tag, 
+               user: existingUser, 
+-              redirectUrl: tag.redirectUrl 
++              redirectUrl
+             };
+           }
+         }
+@@ -267,11 +277,16 @@ export const appRouter = router({
+               latitude: input.latitude || null,
+               longitude: input.longitude || null,
+             });
++            
++            // Check for active dynamic link (priority: specific tag > global > tag default)
++            const activeLink = await getActiveDeviceLink(input.deviceId, tag.id);
++            const redirectUrl = activeLink?.targetUrl || tag.redirectUrl;
++            
+             return { 
+               isNewUser: false, 
+               user: existingUser,
+               tagId: tag.id,
+-              redirectUrl: tag.redirectUrl 
++              redirectUrl
+             };
+           } else {
+             // User exists but not connected to this tag - create new relation
+@@ -286,11 +301,16 @@ export const appRouter = router({
+               latitude: input.latitude || null,
+               longitude: input.longitude || null,
+             });
++            
++            // Check for active dynamic link (priority: specific tag > global > tag default)
++            const activeLink = await getActiveDeviceLink(input.deviceId, tag.id);
++            const redirectUrl = activeLink?.targetUrl || tag.redirectUrl;
++            
+             return { 
+               isNewUser: false, // User already has data, just connected to new tag
+               user: existingUser,
+               tagId: tag.id,
+-              redirectUrl: tag.redirectUrl 
++              redirectUrl
+             };
+           }
+         }
+@@ -323,11 +343,16 @@ export const appRouter = router({
+         });
+ 
+         const newUser = await getNfcUserById(result.id);
++        
++        // Check for active dynamic link (priority: specific tag > global > tag default)
++        const activeLink = await getActiveDeviceLink(input.deviceId, tag.id);
++        const redirectUrl = activeLink?.targetUrl || tag.redirectUrl;
++        
+         return { 
+           isNewUser: true, 
+           user: newUser,
+           tagId: tag.id,
+-          redirectUrl: tag.redirectUrl 
++          redirectUrl
+         };
+       }),
+ 
+@@ -755,7 +780,7 @@ export const appRouter = router({
+           isWithinRadius = distanceMeters <= (tag.radiusMeters || 100);
+         }
+ 
+-        const activation = await getActiveDeviceLink(nfcUser.deviceId);
++        const activation = await getActiveDeviceLink(nfcUser.deviceId, input.tagId);
+         let activatedLink: {
+           linkId: number;
+           targetUrl: string;
