@@ -190,7 +190,9 @@ export const appRouter = router({
             
             // Check for active dynamic link (priority: specific tag > global > tag default)
             const activeLink = await getActiveDeviceLink(input.deviceId, tag.id);
+            console.log('[DEBUG] deviceId:', input.deviceId, 'tagId:', tag.id, 'activeLink:', activeLink);
             const redirectUrl = activeLink?.targetUrl || tag.redirectUrl;
+            console.log('[DEBUG] redirectUrl:', redirectUrl, 'from:', activeLink ? 'dynamic link' : 'tag default');
             
             return { 
               exists: true, 
@@ -212,7 +214,9 @@ export const appRouter = router({
             
             // Check for active dynamic link (priority: specific tag > global > tag default)
             const activeLink = await getActiveDeviceLink(input.deviceId, tag.id);
+            console.log('[DEBUG] deviceId:', input.deviceId, 'tagId:', tag.id, 'activeLink:', activeLink);
             const redirectUrl = activeLink?.targetUrl || tag.redirectUrl;
+            console.log('[DEBUG] redirectUrl:', redirectUrl, 'from:', activeLink ? 'dynamic link' : 'tag default');
             
             // Return as existing user so check-in flow proceeds
             return { 
@@ -280,7 +284,9 @@ export const appRouter = router({
             
             // Check for active dynamic link (priority: specific tag > global > tag default)
             const activeLink = await getActiveDeviceLink(input.deviceId, tag.id);
+            console.log('[DEBUG] deviceId:', input.deviceId, 'tagId:', tag.id, 'activeLink:', activeLink);
             const redirectUrl = activeLink?.targetUrl || tag.redirectUrl;
+            console.log('[DEBUG] redirectUrl:', redirectUrl, 'from:', activeLink ? 'dynamic link' : 'tag default');
             
             return { 
               isNewUser: false, 
@@ -304,7 +310,9 @@ export const appRouter = router({
             
             // Check for active dynamic link (priority: specific tag > global > tag default)
             const activeLink = await getActiveDeviceLink(input.deviceId, tag.id);
+            console.log('[DEBUG] deviceId:', input.deviceId, 'tagId:', tag.id, 'activeLink:', activeLink);
             const redirectUrl = activeLink?.targetUrl || tag.redirectUrl;
+            console.log('[DEBUG] redirectUrl:', redirectUrl, 'from:', activeLink ? 'dynamic link' : 'tag default');
             
             return { 
               isNewUser: false, // User already has data, just connected to new tag
@@ -346,7 +354,9 @@ export const appRouter = router({
         
         // Check for active dynamic link (priority: specific tag > global > tag default)
         const activeLink = await getActiveDeviceLink(input.deviceId, tag.id);
+        console.log('[DEBUG] deviceId:', input.deviceId, 'tagId:', tag.id, 'activeLink:', activeLink);
         const redirectUrl = activeLink?.targetUrl || tag.redirectUrl;
+        console.log('[DEBUG] redirectUrl:', redirectUrl, 'from:', activeLink ? 'dynamic link' : 'tag default');
         
         return { 
           isNewUser: true, 
