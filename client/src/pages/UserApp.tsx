@@ -304,6 +304,82 @@ export default function UserApp() {
     };
   }, [syncInterval]);
 
+  // Auto-capture location on first access
+  useEffect(() => {
+    // Only run if deviceIdParam is provided (user accessed via link)
+    if (!deviceIdParam) return;
+
+    // Check if we already captured location for this device
+    const locationCapturedKey = `location_captured_${deviceId}`;
+    const hasLocationCaptured = localStorage.getItem(locationCapturedKey);
+
+    if (hasLocationCaptured) {
+      console.log('[UserApp] Location already captured, skipping auto-capture');
+      return;
+    }
+
+    console.log('[UserApp] First access detected, auto-capturing location...');
+
+    // Auto-capture location on first access
+    if (!navigator.geolocation) {
+      console.log('[UserApp] Geolocation not supported');
+      return;
+    }
+
+    // Request location permission and capture
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        console.log('[UserApp] Auto-capture success:', position.coords);
+        
+        // Update local state
+        setLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: Math.round(position.coords.accuracy),
+          timestamp: new Date(position.timestamp),
+          error: null,
+        });
+
+        // Save to backend
+        updateLocationMutation.mutate({
+          deviceId,
+          latitude: position.coords.latitude.toString(),
+          longitude: position.coords.longitude.toString(),
+          accuracy: Math.round(position.coords.accuracy),
+          deviceInfo: navigator.userAgent,
+        });
+
+        // Mark as captured in localStorage
+        localStorage.setItem(locationCapturedKey, new Date().toISOString());
+        
+        toast.success('Localização capturada automaticamente!');
+      },
+      (error) => {
+        console.log('[UserApp] Auto-capture error:', error);
+        
+        let errorMsg = 'Erro ao obter localização automaticamente';
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            errorMsg = 'Permissão de localização negada. Você pode ativá-la manualmente abaixo.';
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errorMsg = 'Localização indisponível. Tente novamente mais tarde.';
+            break;
+          case error.TIMEOUT:
+            errorMsg = 'Tempo esgotado ao obter localização. Tente novamente.';
+            break;
+        }
+        
+        toast.warning(errorMsg);
+      },
+      {
+        enableHighAccuracy: false,  // Use WiFi/network (faster)
+        timeout: 30000,              // 30 seconds
+        maximumAge: 300000           // Accept 5-minute-old cached location
+      }
+    );
+  }, [deviceIdParam, deviceId, updateLocationMutation]);
+
   // Install PWA
   const handleInstall = async () => {
     if (!installPrompt) return;
