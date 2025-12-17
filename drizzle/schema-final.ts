@@ -59,7 +59,7 @@ export const refreshTokens = pgTable("refresh_tokens", {
   ipAddress: varchar("ipAddress", { length: 64 }),
   userAgent: text("userAgent"),
   createdAt: timestamp("createdAt", { withTimezone: true }).defaultNow().notNull(),
-});
+},{ schema: "dev_iecg" });
 
 export type RefreshToken = typeof refreshTokens.$inferSelect;
 export type InsertRefreshToken = typeof refreshTokens.$inferInsert;
@@ -76,7 +76,7 @@ export const nfcTags = pgTable("nfc_tags", {
   isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { withTimezone: true }).defaultNow().notNull(),
-});
+},{ schema: "dev_iecg" });
 
 export type NfcTag = typeof nfcTags.$inferSelect;
 export type InsertNfcTag = typeof nfcTags.$inferInsert;
@@ -93,7 +93,7 @@ export const nfcUsers = pgTable("nfc_users", {
   isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { withTimezone: true }).defaultNow().notNull(),
-});
+},{ schema: "dev_iecg" });
 
 export type NfcUser = typeof nfcUsers.$inferSelect;
 export type InsertNfcUser = typeof nfcUsers.$inferInsert;
@@ -110,7 +110,7 @@ export const checkinSchedules = pgTable("checkin_schedules", {
   isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { withTimezone: true }).defaultNow().notNull(),
-});
+},{ schema: "dev_iecg" });
 
 export type CheckinSchedule = typeof checkinSchedules.$inferSelect;
 export type InsertCheckinSchedule = typeof checkinSchedules.$inferInsert;
@@ -127,7 +127,7 @@ export const checkins = pgTable("checkins", {
   location: varchar("location", { length: 255 }),
   createdAt: timestamp("createdAt", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { withTimezone: true }).defaultNow().notNull(),
-});
+},{ schema: "dev_iecg" });
 
 export type Checkin = typeof checkins.$inferSelect;
 export type InsertCheckin = typeof checkins.$inferInsert;
@@ -143,7 +143,7 @@ export const connectionLogs = pgTable("connection_logs", {
   userAgent: text("userAgent"),
   status: varchar("status", { length: 50 }).default("success").notNull(),
   createdAt: timestamp("createdAt", { withTimezone: true }).defaultNow().notNull(),
-});
+},{ schema: "dev_iecg" });
 
 export type ConnectionLog = typeof connectionLogs.$inferSelect;
 export type InsertConnectionLog = typeof connectionLogs.$inferInsert;
@@ -159,7 +159,7 @@ export const dynamicLinks = pgTable("dynamic_links", {
   isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { withTimezone: true }).defaultNow().notNull(),
-});
+},{ schema: "dev_iecg" });
 
 export type DynamicLink = typeof dynamicLinks.$inferSelect;
 export type InsertDynamicLink = typeof dynamicLinks.$inferInsert;
@@ -196,7 +196,7 @@ export const notificationGroups = pgTable("notification_groups", {
   isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { withTimezone: true }).defaultNow().notNull(),
-});
+},{ schema: "dev_iecg" });
 
 export type NotificationGroup = typeof notificationGroups.$inferSelect;
 export type InsertNotificationGroup = typeof notificationGroups.$inferInsert;
@@ -209,7 +209,7 @@ export const groupUserRelations = pgTable("group_user_relations", {
   groupId: uuid("groupId").notNull(),
   userId: uuid("userId").notNull(),
   createdAt: timestamp("createdAt", { withTimezone: true }).defaultNow().notNull(),
-});
+},{ schema: "dev_iecg" });
 
 export type GroupUserRelation = typeof groupUserRelations.$inferSelect;
 export type InsertGroupUserRelation = typeof groupUserRelations.$inferInsert;
@@ -222,8 +222,7 @@ export const groupScheduleRelations = pgTable("group_schedule_relations", {
   groupId: uuid("groupId").notNull(),
   scheduleId: uuid("scheduleId").notNull(),
   createdAt: timestamp("createdAt", { withTimezone: true }).defaultNow().notNull(),
-});
-
+},{ schema: "dev_iecg" });
 export type GroupScheduleRelation = typeof groupScheduleRelations.$inferSelect;
 export type InsertGroupScheduleRelation = typeof groupScheduleRelations.$inferInsert;
 
@@ -235,7 +234,7 @@ export const userTagRelations = pgTable("user_tag_relations", {
   userId: uuid("userId").notNull(),
   tagId: uuid("tagId").notNull(),
   createdAt: timestamp("createdAt", { withTimezone: true }).defaultNow().notNull(),
-});
+},{ schema: "dev_iecg" });
 
 export type UserTagRelation = typeof userTagRelations.$inferSelect;
 export type InsertUserTagRelation = typeof userTagRelations.$inferInsert;
@@ -248,7 +247,7 @@ export const scheduleTagRelations = pgTable("schedule_tag_relations", {
   scheduleId: uuid("scheduleId").notNull(),
   tagId: uuid("tagId").notNull(),
   createdAt: timestamp("createdAt", { withTimezone: true }).defaultNow().notNull(),
-});
+},{ schema: "dev_iecg" });
 
 export type ScheduleTagRelation = typeof scheduleTagRelations.$inferSelect;
 export type InsertScheduleTagRelation = typeof scheduleTagRelations.$inferInsert;
@@ -263,7 +262,7 @@ export const userLocationUpdates = pgTable("user_location_updates", {
   longitude: decimal("longitude", { precision: 11, scale: 8 }),
   accuracy: decimal("accuracy", { precision: 10, scale: 2 }),
   createdAt: timestamp("createdAt", { withTimezone: true }).defaultNow().notNull(),
-});
+}, { schema: "dev_iecg" });
 
 export type UserLocationUpdate = typeof userLocationUpdates.$inferSelect;
 export type InsertUserLocationUpdate = typeof userLocationUpdates.$inferInsert;
@@ -279,7 +278,7 @@ export const automaticCheckins = pgTable("automatic_checkins", {
   isEnabled: boolean("isEnabled").default(true).notNull(),
   createdAt: timestamp("createdAt", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { withTimezone: true }).defaultNow().notNull(),
-});
+},{ schema: "dev_iecg" });
 
 export type AutomaticCheckin = typeof automaticCheckins.$inferSelect;
 export type InsertAutomaticCheckin = typeof automaticCheckins.$inferInsert;

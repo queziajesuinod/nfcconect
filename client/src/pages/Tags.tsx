@@ -90,8 +90,8 @@ export default function Tags() {
 
   const utils = trpc.useUtils();
   const { data: tagsData, isLoading } = trpc.tags.list.useQuery({ page, pageSize });
-  const totalPages = tagsData?.totalPages ?? 1;
   const totalTags = tagsData?.total ?? 0;
+  const totalPages = Math.max(Math.ceil(totalTags / pageSize) || 1, 1);
   const tags = tagsData?.items ?? [];
   useEffect(() => {
     if (page > totalPages && totalPages > 0) {

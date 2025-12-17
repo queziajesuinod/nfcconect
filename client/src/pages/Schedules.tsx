@@ -65,7 +65,7 @@ export default function Schedules() {
   const schedules = schedulesPage?.items || [];
   const totalSchedules = schedulesPage?.total ?? 0;
   const totalPages = schedulesPage?.totalPages ?? 1;
-  const { data: tagsPage } = trpc.tags.list.useQuery({ page: 1, pageSize: 1000 });
+  const { data: tagsPage } = trpc.tags.list.useQuery({ page: 1, pageSize: 100 });
   const tags = tagsPage?.items || [];
   const { data: automaticCheckins } = trpc.automaticCheckins.list.useQuery({ limit: 100 });
 

@@ -253,11 +253,12 @@ export default function Links() {
   };
 
   const handleEdit = (link: NonNullable<typeof links>[0]) => {
-    setFormData({
+    setFormData((prev) => ({
+      ...prev,
       nfcUserId: link.nfcUserId,
       targetUrl: link.targetUrl,
       title: link.title || "",
-    });
+    }));
     setEditId(link.id);
     setEditIsActive(link.isActive);
     setIsEditOpen(true);

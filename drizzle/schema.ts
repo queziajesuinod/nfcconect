@@ -1,4 +1,4 @@
-import { pgTable, pgEnum, serial, varchar, text, boolean, timestamp, integer, uuid, index } from "drizzle-orm/pg-core";
+import { pgTable, pgEnum, serial, varchar, text, boolean, timestamp, integer, uuid, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 /**
@@ -189,10 +189,9 @@ export const deviceLinkActivations = pgTable("device_link_activations", {
   expiresAt: timestamp("expiresAt", { withTimezone: true }).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => ({
-  deviceTagUnique: index("device_link_activations_device_tag_unique").on(table.deviceId, table.tagId).unique(),
-  deviceNullUnique: index("device_link_activations_device_null_unique")
+  deviceTagUnique: uniqueIndex("device_link_activations_device_tag_unique").on(table.deviceId, table.tagId),
+  deviceNullUnique: uniqueIndex("device_link_activations_device_null_unique")
     .on(table.deviceId)
-    .unique()
     .where(sql`${table.tagId} is null`),
 }));
 

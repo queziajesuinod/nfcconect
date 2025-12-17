@@ -16,11 +16,13 @@ import {
   userLocationUpdates, InsertUserLocationUpdate,
   scheduleTagRelations, InsertScheduleTagRelation,
   notificationGroups, InsertNotificationGroup, NotificationGroup,
-  groupScheduleRelations, InsertScheduleTagRelation,
+  groupScheduleRelations, InsertGroupScheduleRelation,
   groupUserRelations, InsertGroupUserRelation
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { generateLegacySalt, hashLegacyPassword } from "./_core/password";
+
+type DatabaseClient = ReturnType<typeof drizzle>;
 
 let _db: ReturnType<typeof drizzle> | null = null;
 let _client: ReturnType<typeof postgres> | null = null;
@@ -104,7 +106,7 @@ type CreateAdminUserInput = {
   username?: string | null;
 };
 
-async function findOrCreateAdminPerfil(db: NonNullable<ReturnType<typeof getDb>>) {
+async function findOrCreateAdminPerfil(db: DatabaseClient) {
   const existing = await db
     .select()
     .from(perfis)
@@ -630,19 +632,20 @@ export async function getDeviceLinkActivationsByLinkId(linkId: number) {
 export async function getCheckinStats() {
   const db = await getDb();
   if (!db) return { totalCheckins: 0, checkinsWithinRadius: 0, checkinsOutsideRadius: 0, checkinsToday: 0 };
-  
+
   const [total] = await db.select({ count: sql<number>`count(*)` }).from(checkins);
   const [withinRadius] = await db.select({ count: sql<number>`count(*)` }).from(checkins)
     .where(eq(checkins.isWithinRadius, true));
   const [outsideRadius] = await db.select({ count: sql<number>`count(*)` }).from(checkins)
     .where(eq(checkins.isWithinRadius, false));
-  
+
   // Get today's checkins
-  const today = new Date();
+  const now = new Date();
+  const today = new Date(now);
   today.setHours(0, 0, 0, 0);
   const [todayCount] = await db.select({ count: sql<number>`count(*)` }).from(checkins)
-    .where(sql`${checkins.createdAt} >= ${today}`);
-  
+    .where(sql`${checkins.createdAt} <= ${now}`);
+
   return {
     totalCheckins: Number(total?.count || 0),
     checkinsWithinRadius: Number(withinRadius?.count || 0),
@@ -896,7 +899,7 @@ export async function getUsersWithRecentLocation(minutesAgo = 30) {
 export async function getUsersByTagIdWithRecentLocation(tagId: number, minutesAgo = 30) {
   const db = await getDb();
   if (!db) return [];
-  
+
   const cutoffTime = new Date(Date.now() - minutesAgo * 60 * 1000);
   
   // Get users associated with this tag through userTagRelations
@@ -910,13 +913,13 @@ export async function getUsersByTagIdWithRecentLocation(tagId: number, minutesAg
     const [user] = await db.select().from(nfcUsers).where(eq(nfcUsers.id, relation.userId)).limit(1);
     if (!user) continue;
     
-    const [latestLocation] = await db.select().from(userLocationUpdates)
-      .where(and(
-        eq(userLocationUpdates.nfcUserId, user.id),
-        sql`${userLocationUpdates.createdAt} >= ${cutoffTime}`
-      ))
-      .orderBy(desc(userLocationUpdates.createdAt))
-      .limit(1);
+      const [latestLocation] = await db.select().from(userLocationUpdates)
+        .where(and(
+          eq(userLocationUpdates.nfcUserId, user.id),
+          sql`${userLocationUpdates.createdAt} >= ${cutoffTime}`
+        ))
+        .orderBy(desc(userLocationUpdates.createdAt))
+        .limit(1);
     
     if (latestLocation) {
       usersWithLocation.push({
@@ -1483,7 +1486,6 @@ export async function getCheckinHistoryByUser(params: CheckinHistoryParams) {
 
   const manualRows = await db.select({
     id: checkins.id,
-    type: sql<string>`'manual'`.as("type"),
     tagId: checkins.tagId,
     distanceMeters: checkins.distanceMeters,
     isWithinRadius: checkins.isWithinRadius,
@@ -1506,7 +1508,6 @@ export async function getCheckinHistoryByUser(params: CheckinHistoryParams) {
 
   const autoRows = await db.select({
     id: automaticCheckins.id,
-    type: sql<string>`'automatic'`.as("type"),
     tagId: automaticCheckins.tagId,
     scheduleId: automaticCheckins.scheduleId,
     distanceMeters: automaticCheckins.distanceMeters,
@@ -1531,38 +1532,40 @@ export async function getCheckinHistoryByUser(params: CheckinHistoryParams) {
     .orderBy(desc(automaticCheckins.checkinTime))
     .limit(limit);
 
-  const combined: CheckinHistoryItem[] = [
-    ...manualRows.map((row) => ({
-      id: row.id,
-      type: "manual",
-      tagId: row.tagId,
-      tagName: row.tagName,
-      tagUid: row.tagUid,
-      distanceMeters: row.distanceMeters,
-      isWithinRadius: row.isWithinRadius,
-      createdAt: row.createdAt,
-      insideSchedule: row.deviceInfo === "manual-schedule",
-      scheduleId: null,
-      scheduleName: null,
-      scheduleStartTime: null,
-      scheduleEndTime: null,
-    })),
-    ...autoRows.map((row) => ({
-      id: row.id,
-      type: "automatic",
-      tagId: row.tagId,
-      tagName: row.tagName,
-      tagUid: row.tagUid,
-      distanceMeters: row.distanceMeters,
-      isWithinRadius: row.isWithinRadius,
-      createdAt: row.createdAt,
-      insideSchedule: true,
-      scheduleId: row.scheduleId,
-      scheduleName: row.scheduleName,
-      scheduleStartTime: row.scheduleStartTime,
-      scheduleEndTime: row.scheduleEndTime,
-    })),
-  ];
+  const manualHistory: CheckinHistoryItem[] = manualRows.map((row) => ({
+    id: row.id,
+    type: "manual",
+    tagId: row.tagId,
+    tagName: row.tagName,
+    tagUid: row.tagUid,
+    distanceMeters: row.distanceMeters,
+    isWithinRadius: row.isWithinRadius,
+    createdAt: row.createdAt,
+    insideSchedule: row.deviceInfo === "manual-schedule",
+    scheduleId: null,
+    scheduleName: null,
+    scheduleStartTime: null,
+    scheduleEndTime: null,
+  }));
+
+  const autoHistory: CheckinHistoryItem[] = autoRows.map((row) => ({
+    id: row.id,
+    type: "automatic",
+    tagId: row.tagId,
+    tagName: row.tagName,
+    tagUid: row.tagUid,
+    distanceMeters: row.distanceMeters,
+    isWithinRadius: row.isWithinRadius,
+    createdAt: row.createdAt,
+    insideSchedule: true,
+    scheduleId: row.scheduleId,
+    scheduleName: row.scheduleName,
+    scheduleStartTime: row.scheduleStartTime,
+    scheduleEndTime: row.scheduleEndTime,
+  }));
+
+  const combined = [...manualHistory, ...autoHistory];
+
 
   const sorted = combined.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   const filtered =
@@ -1667,23 +1670,26 @@ export async function getUnifiedCheckinStats() {
   const db = await getDb();
   if (!db) return { totalCheckins: 0, checkinsWithinRadius: 0, checkinsOutsideRadius: 0, checkinsToday: 0 };
   
-  const today = new Date();
+  const now = new Date();
+  const today = new Date(now);
   today.setHours(0, 0, 0, 0);
   
   // Auto check-ins stats
-  const autoStats = await db.select({
-    total: sql<number>`count(*)`,
-    withinRadius: sql<number>`sum(case when ${automaticCheckins.isWithinRadius} = true then 1 else 0 end)`,
-    outsideRadius: sql<number>`sum(case when ${automaticCheckins.isWithinRadius} = false then 1 else 0 end)`,
-    today: sql<number>`sum(case when ${automaticCheckins.createdAt} >= ${today} then 1 else 0 end)`,
-  }).from(automaticCheckins);
+  const autoStats = await db.$client`
+    select
+      count(*)::int as total,
+      sum(case when "isWithinRadius" = true then 1 else 0 end)::int as withinRadius,
+      sum(case when "isWithinRadius" = false then 1 else 0 end)::int as outsideRadius,
+      sum(case when "createdAt" <= ${now} then 1 else 0 end)::int as today
+    from dev_iecg."automatic_checkins"
+  `.then((rows) => rows);
   
   // Manual check-ins stats
   const manualStats = await db.select({
     total: sql<number>`count(*)`,
     withinRadius: sql<number>`sum(case when ${checkins.isWithinRadius} = true then 1 else 0 end)`,
     outsideRadius: sql<number>`sum(case when ${checkins.isWithinRadius} = false then 1 else 0 end)`,
-    today: sql<number>`sum(case when ${checkins.createdAt} >= ${today} then 1 else 0 end)`,
+    today: sql<number>`sum(case when ${checkins.createdAt} <= ${now} then 1 else 0 end)`,
   }).from(checkins);
   
   return {
@@ -1982,9 +1988,9 @@ export async function findUsersCheckedInSchedule(scheduleId: number) {
   const rows = await db.select({
     userId: automaticCheckins.nfcUserId,
   })
-    .distinct()
     .from(automaticCheckins)
-    .where(eq(automaticCheckins.scheduleId, scheduleId));
+    .where(eq(automaticCheckins.scheduleId, scheduleId))
+    .groupBy(automaticCheckins.nfcUserId);
 
   return rows.map((row) => row.userId);
 }
