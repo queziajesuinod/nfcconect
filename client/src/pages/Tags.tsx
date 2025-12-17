@@ -257,12 +257,14 @@ export default function Tags() {
     const getCurrentLocation = () => {
     console.log("[Tags] requesting browser geolocation");
     if (!navigator.geolocation) {
-      toast.error("Geolocalização não suportada");
-      fetchIpLocation();
+      toast.error("Geolocalização não suportada pelo navegador");
+      fetchIpLocation("geolocation not supported");
       return;
     }
 
     setIsGettingLocation(true);
+    
+    // Try with standard accuracy first (faster, works better indoors)
     navigator.geolocation.getCurrentPosition(
       (position) => {
         console.log("[Tags] browser location success:", position.coords);
@@ -272,14 +274,31 @@ export default function Tags() {
           longitude: position.coords.longitude.toString(),
         }));
         setIsGettingLocation(false);
-        toast.success("Localização capturada!");
+        toast.success("Localização capturada com sucesso!");
       },
       (error) => {
         console.log("[Tags] browser location error:", error);
-        toast.error("Erro ao obter localização: " + error.message);
+        
+        // Provide user-friendly error messages
+        let errorMessage = "Erro ao obter localização";
+        if (error.code === error.PERMISSION_DENIED) {
+          errorMessage = "Permissão de localização negada. Usando localização aproximada por IP.";
+        } else if (error.code === error.POSITION_UNAVAILABLE) {
+          errorMessage = "Localização indisponível. Usando localização aproximada por IP.";
+        } else if (error.code === error.TIMEOUT) {
+          errorMessage = "Tempo esgotado ao obter localização. Usando localização aproximada por IP.";
+        }
+        
+        toast.warning(errorMessage);
+        
+        // Fallback to IP-based geolocation
         fetchIpLocation(error.message);
       },
-      { enableHighAccuracy: true, timeout: 10000 }
+      { 
+        enableHighAccuracy: false,  // Use network/WiFi location (faster)
+        timeout: 30000,              // 30 seconds timeout
+        maximumAge: 300000           // Accept cached location up to 5 minutes old
+      }
     );
   };
 
