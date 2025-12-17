@@ -1702,7 +1702,7 @@ export async function getUnifiedCheckinStats() {
       count(*)::int as total,
       sum(case when "isWithinRadius" = true then 1 else 0 end)::int as withinRadius,
       sum(case when "isWithinRadius" = false then 1 else 0 end)::int as outsideRadius,
-      sum(case when "createdAt" <= ${now} then 1 else 0 end)::int as today
+      sum(case when "createdAt" >= ${today} then 1 else 0 end)::int as today
     from dev_iecg."automatic_checkins"
   `.then((rows) => rows);
   
@@ -1711,7 +1711,7 @@ export async function getUnifiedCheckinStats() {
     total: sql<number>`count(*)`,
     withinRadius: sql<number>`sum(case when ${checkins.isWithinRadius} = true then 1 else 0 end)`,
     outsideRadius: sql<number>`sum(case when ${checkins.isWithinRadius} = false then 1 else 0 end)`,
-    today: sql<number>`sum(case when ${checkins.createdAt} <= ${now} then 1 else 0 end)`,
+    today: sql<number>`sum(case when ${checkins.createdAt} >= ${today} then 1 else 0 end)`,
   }).from(checkins);
   
   return {
