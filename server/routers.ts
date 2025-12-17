@@ -6,6 +6,7 @@ import { authRouter } from "./routers/auth";
 import { z } from "zod";
 import { nanoid } from "nanoid";
 import { TRPCError } from "@trpc/server";
+import { ENV } from "./_core/env";
 import {
   createNfcTag, getNfcTagByUid, getNfcTagById, getAllNfcTags, getNfcTagsPaginated, updateNfcTag, deleteNfcTag,
   createNfcUser, getNfcUserByDeviceId, getNfcUserById, getAllNfcUsers, updateNfcUser, validateNfcUser, deleteNfcUser,
@@ -24,7 +25,8 @@ import {
   createNotificationGroup, getAllNotificationGroups, getNotificationGroupById, updateNotificationGroup, deleteNotificationGroup,
   addScheduleToGroup, removeScheduleFromGroup, getGroupSchedules, getScheduleGroups,
   addUserToGroup, removeUserFromGroup, getGroupUsers, getUserGroups, getGroupStats, getAllGroupsWithStats, getGroupsWithStatsPaginated,
-  autoAddUserToScheduleGroups, getGroupRedirectUrlForUser
+  autoAddUserToScheduleGroups, getGroupRedirectUrlForUser,
+  isScheduleActive, calculateDistance
 } from "./db";
 
 // Helper function to get current date/time in Campo Grande MS timezone (UTC-4)
@@ -34,22 +36,6 @@ function getCampoGrandeTime(): Date {
   const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
   const campoGrandeOffset = -4 * 60 * 60000; // UTC-4 in milliseconds
   return new Date(utcTime + campoGrandeOffset);
-}
-
-// Helper function to calculate distance between two coordinates (Haversine formula)
-function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371e3; // Earth's radius in meters
-  const φ1 = lat1 * Math.PI / 180;
-  const φ2 = lat2 * Math.PI / 180;
-  const Δφ = (lat2 - lat1) * Math.PI / 180;
-  const Δλ = (lon2 - lon1) * Math.PI / 180;
-
-  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-            Math.cos(φ1) * Math.cos(φ2) *
-            Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  return R * c; // Distance in meters
 }
 
 // Use protectedProcedure for all admin endpoints
@@ -1266,6 +1252,183 @@ export const appRouter = router({
           usersWithinRadius: results.filter(r => r.isWithinRadius).length,
           results,
           skipped,
+        };
+      }),
+
+    // Admin: process automatic check-ins for a schedule (Sprint 2)
+    // This is the main endpoint for proximity-based check-ins
+    processAutomaticCheckins: adminProcedure
+      .input(z.object({ scheduleId: z.number() }))
+      .mutation(async ({ input }) => {
+        console.log(`[Auto Check-in] Processing schedule ${input.scheduleId}...`);
+
+        // 1. Buscar agendamento
+        const schedule = await getCheckinScheduleById(input.scheduleId);
+        if (!schedule) {
+          console.log('[Auto Check-in] Schedule not found');
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Agendamento não encontrado' });
+        }
+
+        // 2. Verificar se está ativo no momento
+        const now = getCampoGrandeTime();
+        const isActive = isScheduleActive(schedule, now);
+        
+        if (!isActive) {
+          console.log('[Auto Check-in] Schedule not active at current time');
+          return {
+            processed: 0,
+            message: 'Agendamento não está ativo no momento',
+            details: {
+              scheduleName: schedule.name,
+              isEnabled: schedule.isActive,
+              currentDay: now.getDay(),
+              currentTime: now.toTimeString().slice(0, 5),
+              scheduleDays: schedule.daysOfWeek,
+              scheduleTime: `${schedule.startTime} - ${schedule.endTime}`,
+            },
+          };
+        }
+
+        console.log('[Auto Check-in] Schedule is active, processing...');
+
+        // 3. Buscar tags do agendamento
+        const tagRelations = await getScheduleTagRelations(input.scheduleId);
+        
+        if (tagRelations.length === 0) {
+          console.log('[Auto Check-in] No tags found for schedule');
+          return {
+            processed: 0,
+            message: 'Nenhuma tag associada ao agendamento',
+          };
+        }
+
+        console.log(`[Auto Check-in] Found ${tagRelations.length} tags`);
+
+        let processedCount = 0;
+        const radius = ENV.proximityRadiusMeters;
+        const details: Array<{
+          userId: number;
+          userName: string;
+          tagName: string;
+          distance: number;
+          withinRadius: boolean;
+        }> = [];
+
+        // 4. Para cada tag
+        for (const tagRelation of tagRelations) {
+          const tag = {
+            id: tagRelation.tagId,
+            uid: tagRelation.tagUid,
+            name: tagRelation.tagName,
+            latitude: tagRelation.tagLatitude,
+            longitude: tagRelation.tagLongitude,
+          };
+
+          if (!tag.latitude || !tag.longitude) {
+            console.log(`[Auto Check-in] Tag ${tag.uid} has no geolocation, skipping`);
+            continue;
+          }
+
+          // 5. Buscar usuários com localização recente (últimos 30 minutos)
+          const usersWithLocation = await getUsersByTagIdWithRecentLocation(tag.id, 30);
+          
+          console.log(`[Auto Check-in] Tag ${tag.uid}: ${usersWithLocation.length} users with recent location`);
+
+          // 6. Para cada usuário
+          for (const { user, location } of usersWithLocation) {
+            // Verificar se já tem check-in hoje
+            const hasCheckin = await hasUserCheckinForScheduleToday(
+              input.scheduleId,
+              user.id,
+              now
+            );
+
+            if (hasCheckin) {
+              console.log(`[Auto Check-in] User ${user.name} already checked in today`);
+              continue;
+            }
+
+            // Calcular distância usando função Haversine
+            const distance = calculateDistance(
+              parseFloat(location.latitude),
+              parseFloat(location.longitude),
+              parseFloat(tag.latitude),
+              parseFloat(tag.longitude)
+            );
+
+            const distanceRounded = Math.round(distance);
+            const withinRadius = distance <= radius;
+
+            console.log(
+              `[Auto Check-in] User ${user.name} is ${distanceRounded}m from tag ${tag.uid} ` +
+              `(radius: ${radius}m, within: ${withinRadius})`
+            );
+
+            // Se dentro do raio, registrar check-in
+            if (withinRadius) {
+              await createAutomaticCheckin({
+                scheduleId: input.scheduleId,
+                nfcUserId: user.id,
+                tagId: tag.id,
+                userLatitude: location.latitude,
+                userLongitude: location.longitude,
+                distanceMeters: distanceRounded,
+                isWithinRadius: true,
+                scheduledDate: now,
+                periodStart: schedule.startTime,
+                periodEnd: schedule.endTime,
+                checkinTime: now,
+                status: 'completed',
+                errorMessage: null,
+              });
+
+              // Auto-associar usuário aos grupos do agendamento
+              try {
+                await autoAddUserToScheduleGroups(user.id, input.scheduleId);
+              } catch (error) {
+                console.warn(`[Auto Check-in] Error adding user ${user.id} to groups:`, error);
+              }
+
+              processedCount++;
+              console.log(`[Auto Check-in] ✅ Check-in registered for ${user.name} (${distanceRounded}m)`);
+
+              details.push({
+                userId: user.id,
+                userName: user.name || 'Unknown',
+                tagName: tag.name || tag.uid || 'Unknown',
+                distance: distanceRounded,
+                withinRadius: true,
+              });
+            } else {
+              console.log(
+                `[Auto Check-in] ❌ User ${user.name} outside radius ` +
+                `(${distanceRounded}m > ${radius}m)`
+              );
+
+              details.push({
+                userId: user.id,
+                userName: user.name || 'Unknown',
+                tagName: tag.name || tag.uid || 'Unknown',
+                distance: distanceRounded,
+                withinRadius: false,
+              });
+            }
+          }
+        }
+
+        console.log(`[Auto Check-in] Processed ${processedCount} check-ins`);
+
+        return {
+          processed: processedCount,
+          message: `${processedCount} check-in(s) automático(s) registrado(s)`,
+          details: {
+            scheduleName: schedule.name,
+            tagsProcessed: tagRelations.length,
+            usersEvaluated: details.length,
+            usersCheckedIn: processedCount,
+            proximityRadius: radius,
+            checkins: details,
+          },
         };
       }),
   }),

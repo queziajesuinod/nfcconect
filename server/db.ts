@@ -1034,6 +1034,42 @@ export async function getUsersByTagIdWithRecentLocation(tagId: number, minutesAg
 }
 
 /**
+ * Check if a schedule is currently active based on day of week and time
+ * @param schedule The checkin schedule to check
+ * @param now Current date/time to check against
+ * @returns true if schedule is active at the given time
+ */
+export function isScheduleActive(schedule: any, now: Date): boolean {
+  // Check if schedule is enabled
+  if (!schedule.isActive) {
+    return false;
+  }
+
+  // Get current day of week (0 = Sunday, 6 = Saturday)
+  const currentDay = now.getDay();
+  
+  // Parse days of week from schedule (e.g., "1,3,5" for Mon, Wed, Fri)
+  const scheduleDays = schedule.daysOfWeek
+    .split(',')
+    .map((d: string) => parseInt(d.trim(), 10));
+  
+  // Check if current day is in schedule
+  if (!scheduleDays.includes(currentDay)) {
+    return false;
+  }
+
+  // Get current time in HH:MM format
+  const currentTime = now.toTimeString().slice(0, 5); // "HH:MM"
+  
+  // Check if current time is within schedule range
+  if (currentTime < schedule.startTime || currentTime > schedule.endTime) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * Calculate distance between two geographic points using Haversine formula
  * @param lat1 Latitude of point 1 (in degrees)
  * @param lon1 Longitude of point 1 (in degrees)
