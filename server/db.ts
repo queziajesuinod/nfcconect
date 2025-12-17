@@ -531,23 +531,45 @@ export async function setActiveDeviceLink(entry: {
     });
 }
 
-export async function getActiveDeviceLink(deviceId: string) {
+export async function getActiveDeviceLink(deviceId: string, tagId?: number | null) {
   const db = await getDb();
   if (!db) return null;
 
   const now = new Date();
-  const result = await db.select()
+  
+  // Priority 1: Look for specific device + tag activation
+  if (tagId != null) {
+    const specificResult = await db.select()
+      .from(deviceLinkActivations)
+      .where(
+        and(
+          eq(deviceLinkActivations.deviceId, deviceId),
+          eq(deviceLinkActivations.tagId, tagId),
+          gte(deviceLinkActivations.expiresAt, now)
+        )
+      )
+      .orderBy(desc(deviceLinkActivations.createdAt))
+      .limit(1);
+    
+    if (specificResult[0]) {
+      return specificResult[0];
+    }
+  }
+  
+  // Priority 2: Look for global device activation (tagId = null)
+  const globalResult = await db.select()
     .from(deviceLinkActivations)
     .where(
       and(
         eq(deviceLinkActivations.deviceId, deviceId),
+        sql`${deviceLinkActivations.tagId} is null`,
         gte(deviceLinkActivations.expiresAt, now)
       )
     )
     .orderBy(desc(deviceLinkActivations.createdAt))
     .limit(1);
 
-  return result[0] || null;
+  return globalResult[0] || null;
 }
 
 export async function clearActiveDeviceLink(deviceId: string) {
