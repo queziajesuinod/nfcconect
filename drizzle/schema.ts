@@ -1,4 +1,5 @@
 import { pgTable, pgEnum, serial, varchar, text, boolean, timestamp, integer, uuid, index } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 /**
  * Perfis table - existing table from dev_iecg schema
@@ -177,6 +178,26 @@ export const dynamicLinks = pgTable("dynamic_links", {
 
 export type DynamicLink = typeof dynamicLinks.$inferSelect;
 export type InsertDynamicLink = typeof dynamicLinks.$inferInsert;
+
+export const deviceLinkActivations = pgTable("device_link_activations", {
+  id: serial("id").primaryKey(),
+  deviceId: varchar("deviceId", { length: 255 }).notNull(),
+  linkId: integer("linkId").notNull(),
+  nfcUserId: integer("nfcUserId"),
+  tagId: integer("tagId"),
+  targetUrl: text("targetUrl").notNull(),
+  expiresAt: timestamp("expiresAt", { withTimezone: true }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  deviceTagUnique: index("device_link_activations_device_tag_unique").on(table.deviceId, table.tagId).unique(),
+  deviceNullUnique: index("device_link_activations_device_null_unique")
+    .on(table.deviceId)
+    .unique()
+    .where(sql`${table.tagId} is null`),
+}));
+
+export type DeviceLinkActivation = typeof deviceLinkActivations.$inferSelect;
+export type InsertDeviceLinkActivation = typeof deviceLinkActivations.$inferInsert;
 
 
 /**

@@ -31,17 +31,24 @@ import { trpc } from "@/lib/trpc";
 import { Plus, Pencil, Trash2, Link2, ExternalLink, Copy, MousePointer } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { Textarea } from "@/components/ui/textarea";
 
 interface LinkFormData {
   nfcUserId: number | null;
+  groupId: number | null;
   targetUrl: string;
   title: string;
 }
 
 const initialFormData: LinkFormData = {
   nfcUserId: null,
+  groupId: null,
   targetUrl: "",
   title: "",
+};
+
+const initialActivationForm = {
+  expiresInMinutes: 10,
 };
 
 export default function Links() {
@@ -54,7 +61,20 @@ export default function Links() {
 
   const utils = trpc.useUtils();
   const { data: links, isLoading } = trpc.links.list.useQuery();
+  type LinkItem = NonNullable<typeof links>[number];
   const { data: users } = trpc.nfcUsers.list.useQuery();
+  const { data: tagsData } = trpc.tags.list.useQuery();
+  const tags = tagsData?.items ?? [];
+  const { data: groupsData } = trpc.groups.list.useQuery({ page: 1, pageSize: 50 });
+  const groups = groupsData?.items ?? [];
+  const [targetMode, setTargetMode] = useState<"user" | "group">("user");
+  const [activationLink, setActivationLink] = useState<LinkItem | null>(null);
+  const [isActivationOpen, setIsActivationOpen] = useState(false);
+  const [activationForm, setActivationForm] = useState(initialActivationForm);
+  const [deviceInput, setDeviceInput] = useState("");
+  const [selectedDeviceIds, setSelectedDeviceIds] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
+  const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
 
   const createMutation = trpc.links.create.useMutation({
     onSuccess: () => {
@@ -94,20 +114,142 @@ export default function Links() {
     },
   });
 
-  const handleCreate = () => {
-    if (!formData.nfcUserId) {
-      toast.error("Selecione um usuário");
+  const { data: activationRecords, refetch: refetchActivations } = trpc.links.activations.useQuery(
+    { shortCode: activationLink?.shortCode || "" },
+    { enabled: !!activationLink?.shortCode }
+  );
+
+  const activateMutation = trpc.links.activateForDevice.useMutation({
+    onSuccess: () => {
+      utils.links.list.invalidate();
+      setIsActivationOpen(false);
+      setActivationLink(null);
+      setActivationForm(initialActivationForm);
+      toast.success("Link ativado para o dispositivo!");
+      refetchActivations();
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
+
+  const handleOpenActivation = (link: LinkItem) => {
+    setActivationLink(link);
+    setActivationForm(initialActivationForm);
+    setIsActivationOpen(true);
+  };
+
+  const addDeviceFromInput = () => {
+    const values = deviceInput
+      .split(/[\s,;]+/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    if (!values.length) return;
+
+    setSelectedDeviceIds((prev) => {
+      const next = [...prev];
+      values.forEach((value) => {
+        if (!next.includes(value)) {
+          next.push(value);
+        }
+      });
+      return next;
+    });
+
+    setDeviceInput("");
+  };
+
+  const addTagFromInput = () => {
+    const values = tagInput
+      .split(/[\s,;]+/)
+      .map((item) => Number(item.trim()))
+      .filter((value) => !Number.isNaN(value));
+
+    if (!values.length) return;
+
+    setSelectedTagIds((prev) => {
+      const next = [...prev];
+      values.forEach((parsed) => {
+        if (!next.includes(parsed)) {
+          next.push(parsed);
+        }
+      });
+      return next;
+    });
+
+    setTagInput("");
+  };
+
+  const handleActivateForDevice = () => {
+    if (!activationLink) return;
+
+    const pendingDeviceIds = deviceInput
+      .split(/[\s,;]+/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const deviceIds = Array.from(
+      new Set([...selectedDeviceIds, ...pendingDeviceIds])
+    );
+
+    if (pendingDeviceIds.length) {
+      setSelectedDeviceIds(deviceIds);
+      setDeviceInput("");
+    }
+
+    if (deviceIds.length === 0) {
+      toast.error("Informe pelo menos um dispositivo.");
       return;
     }
-    if (!formData.targetUrl.trim()) {
+
+    const pendingTagIds = tagInput
+      .split(/[\s,;]+/)
+      .map((item) => Number(item.trim()))
+      .filter((value) => !Number.isNaN(value));
+    const tagIds = Array.from(new Set([...selectedTagIds, ...pendingTagIds]));
+
+    if (pendingTagIds.length) {
+      setSelectedTagIds(tagIds);
+      setTagInput("");
+    }
+
+    activateMutation.mutate({
+      shortCode: activationLink.shortCode,
+      deviceIds,
+            tagIds: tagIds.length ? tagIds : undefined,
+      expiresInMinutes: activationForm.expiresInMinutes,
+    });
+  };
+
+  const handleCreate = () => {
+    const trimmedUrl = formData.targetUrl.trim();
+    if (!trimmedUrl) {
       toast.error("URL de destino é obrigatória");
       return;
     }
-    createMutation.mutate({
-      nfcUserId: formData.nfcUserId,
-      targetUrl: formData.targetUrl,
+
+    if (targetMode === "user" && !formData.nfcUserId) {
+      toast.error("Selecione um usuário");
+      return;
+    }
+
+    if (targetMode === "group" && !formData.groupId) {
+      toast.error("Selecione um grupo");
+      return;
+    }
+
+    const payload: Parameters<typeof createMutation.mutate>[0] = {
+      targetUrl: trimmedUrl,
       title: formData.title || undefined,
-    });
+    };
+
+    if (targetMode === "user") {
+      payload.nfcUserId = formData.nfcUserId!;
+    } else {
+      payload.groupId = formData.groupId!;
+    }
+
+    createMutation.mutate(payload);
   };
 
   const handleEdit = (link: NonNullable<typeof links>[0]) => {
@@ -171,23 +313,69 @@ export default function Links() {
               </DialogHeader>
               <div className="space-y-4 mt-4">
                 <div>
-                  <Label className="font-bold uppercase text-sm">Usuário NFC *</Label>
-                  <Select 
-                    value={formData.nfcUserId?.toString() || ""} 
-                    onValueChange={(v) => setFormData({ ...formData, nfcUserId: parseInt(v) })}
+                  <Label className="font-bold uppercase text-sm">Destinatário</Label>
+                  <Select
+                    value={targetMode}
+                    onValueChange={(value) => setTargetMode(value as "user" | "group")}
                   >
                     <SelectTrigger className="border-2 border-black rounded-none mt-1">
-                      <SelectValue placeholder="Selecione um usuário" />
+                      <SelectValue placeholder="Selecione o tipo" />
                     </SelectTrigger>
                     <SelectContent className="border-2 border-black rounded-none">
-                      {users?.map((user) => (
-                        <SelectItem key={user.id} value={user.id.toString()}>
-                          {user.name || `Usuário #${user.id}`}
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="user">Usuário</SelectItem>
+                      <SelectItem value="group">Grupo</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+                {targetMode === "user" ? (
+                  <div>
+                    <Label className="font-bold uppercase text-sm">Usuário NFC *</Label>
+                    <Select
+                      value={formData.nfcUserId?.toString() || ""}
+                      onValueChange={(v) =>
+                        setFormData({
+                          ...formData,
+                          nfcUserId: Number.isNaN(Number(v)) ? null : Number(v),
+                        })
+                      }
+                    >
+                      <SelectTrigger className="border-2 border-black rounded-none mt-1">
+                        <SelectValue placeholder="Selecione um usuário" />
+                      </SelectTrigger>
+                      <SelectContent className="border-2 border-black rounded-none">
+                        {users?.map((user) => (
+                          <SelectItem key={user.id} value={user.id.toString()}>
+                            {user.name || `Usuário #${user.id}`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : (
+                  <div>
+                    <Label className="font-bold uppercase text-sm">Grupo NFC *</Label>
+                    <Select
+                      value={formData.groupId?.toString() || ""}
+                      onValueChange={(v) =>
+                        setFormData({
+                          ...formData,
+                          groupId: Number.isNaN(Number(v)) ? null : Number(v),
+                        })
+                      }
+                    >
+                      <SelectTrigger className="border-2 border-black rounded-none mt-1">
+                        <SelectValue placeholder="Selecione um grupo" />
+                      </SelectTrigger>
+                      <SelectContent className="border-2 border-black rounded-none">
+                        {groups.map((group) => (
+                          <SelectItem key={group.id} value={group.id.toString()}>
+                            {group.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div>
                   <Label className="font-bold uppercase text-sm">URL de Destino *</Label>
                   <Input
@@ -287,6 +475,14 @@ export default function Links() {
                     <Button
                       variant="outline"
                       size="sm"
+                      onClick={() => handleOpenActivation(link)}
+                      className="border-2 border-black rounded-none font-bold uppercase"
+                    >
+                      <MousePointer className="w-4 h-4" /> Ativar
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => handleEdit(link)}
                       className="border-2 border-black rounded-none font-bold uppercase"
                     >
@@ -361,8 +557,196 @@ export default function Links() {
                 {updateMutation.isPending ? "Salvando..." : "Salvar Alterações"}
               </Button>
             </div>
-          </DialogContent>
-        </Dialog>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isActivationOpen} onOpenChange={(open) => {
+        setIsActivationOpen(open);
+        if (!open) {
+          setActivationLink(null);
+        }
+      }}>
+        <DialogContent className="border-4 border-black rounded-none brutal-shadow max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black uppercase">Ativar Link Dinâmico</DialogTitle>
+            <p className="text-sm text-gray-500 mt-2">
+              Curto: <code className="font-mono bg-gray-100 px-2 py-0.5 border border-black">/l/{activationLink?.shortCode || "?"}</code>
+            </p>
+            {activationLink && (
+              <p className="text-xs text-gray-600">
+                Destino atual: {activationLink.targetUrl}
+              </p>
+            )}
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div>
+              <Label className="font-bold uppercase text-sm">Dispositivos NFC *</Label>
+              <div className="flex gap-2 mt-1">
+                <Input
+                  list="device-suggestions"
+                  value={deviceInput}
+                  onChange={(event) => setDeviceInput(event.target.value)}
+                  placeholder="Digite/cole os IDs separados por vírgula, espaço ou enter"
+                  className="border-2 border-black rounded-none flex-1"
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      addDeviceFromInput();
+                    }
+                  }}
+                />
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => addDeviceFromInput()}
+                >
+                  Adicionar
+                </Button>
+              </div>
+              <datalist id="device-suggestions">
+                {users?.map((user) => (
+                  <option key={`device-${user.deviceId}`} value={user.deviceId}>
+                    {user.name || user.deviceInfo || user.deviceId}
+                  </option>
+                ))}
+              </datalist>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {selectedDeviceIds.map((deviceId) => {
+                  const user = users?.find((u) => u.deviceId === deviceId);
+                  return (
+                    <span
+                      key={`device-chip-${deviceId}`}
+                      className="px-3 py-1 bg-gray-200 rounded-full flex items-center gap-2 text-xs"
+                    >
+                      {user?.name
+                        ? `${user.name} (${deviceId})`
+                        : deviceId}
+                      <button
+                        className="w-4 h-4 flex items-center justify-center text-gray-700"
+                        onClick={() =>
+                          setSelectedDeviceIds((prev) =>
+                            prev.filter((id) => id !== deviceId)
+                          )
+                        }
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Também é possível colar os dispositivos cadastrados acima. Separe múltiplos IDs por espaço, vírgula ou enter.
+              </p>
+            </div>
+            {activationRecords && activationRecords.length > 0 && (
+              <div className="border-2 border-dashed border-gray-300 rounded-md p-3 bg-gray-50">
+                <p className="text-xs uppercase font-semibold text-gray-500 mb-2">
+                  Ativações anteriores
+                </p>
+                <div className="space-y-1 text-xs text-gray-700">
+                  {activationRecords.map((record) => (
+                    <div key={`activation-${record.id}`} className="flex flex-col gap-1">
+                      <span>
+                        <strong>Dispositivo:</strong> {record.deviceId}
+                      </span>
+                      <span>
+                        <strong>Tag:</strong> {record.tagId ?? "Geral"}
+                      </span>
+                      <span>
+                        <strong>Expira:</strong>{" "}
+                        {new Date(record.expiresAt).toLocaleString("pt-BR")}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div>
+              <Label className="font-bold uppercase text-sm">Tags (opcional)</Label>
+              <div className="flex gap-2 mt-1">
+                <Input
+                  list="tag-suggestions"
+                  value={tagInput}
+                  onChange={(event) => setTagInput(event.target.value)}
+                  placeholder="Selecione ou digite um ID de tag"
+                  className="border-2 border-black rounded-none flex-1"
+                />
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    const value = tagInput.trim();
+                    if (!value) return;
+                    const parsed = Number(value);
+                    if (Number.isNaN(parsed)) {
+                      toast.error("ID de tag inválido");
+                      return;
+                    }
+                    if (selectedTagIds.includes(parsed)) {
+                      setTagInput("");
+                      return;
+                    }
+                    setSelectedTagIds((prev) => [...prev, parsed]);
+                    setTagInput("");
+                  }}
+                >
+                  Adicionar
+                </Button>
+              </div>
+              <datalist id="tag-suggestions">
+                {tags.map((tag) => (
+                  <option key={`tag-${tag.id}`} value={String(tag.id)}>
+                    {tag.name || tag.uid}
+                  </option>
+                ))}
+              </datalist>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {selectedTagIds.map((tagId) => (
+                  <span
+                    key={`chip-${tagId}`}
+                    className="px-3 py-1 bg-gray-200 rounded-full flex items-center gap-2 text-xs"
+                  >
+                    Tag #{tagId}
+                    <button
+                      className="w-4 h-4 flex items-center justify-center text-gray-700"
+                      onClick={() => setSelectedTagIds((prev) => prev.filter((id) => id !== tagId))}
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Deixe em branco para manter a tag padrão do link ou adicione várias tags aqui.
+              </p>
+            </div>
+            <div>
+              <Label className="font-bold uppercase text-sm">Expira em (minutos)</Label>
+              <Input
+                type="number"
+                min={1}
+                max={60}
+                value={activationForm.expiresInMinutes}
+                onChange={(event) =>
+                  setActivationForm({
+                    ...activationForm,
+                    expiresInMinutes: Math.max(1, Math.min(60, Number(event.target.value) || 10)),
+                  })
+                }
+                className="border-2 border-black rounded-none mt-1"
+              />
+            </div>
+            <Button
+              onClick={handleActivateForDevice}
+              disabled={activateMutation.isPending}
+              className="w-full brutal-shadow-sm hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all font-bold uppercase mt-2"
+            >
+              {activateMutation.isPending ? "Ativando..." : "Ativar Link"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
         {/* Delete Confirmation */}
         <AlertDialog open={deleteId !== null} onOpenChange={() => setDeleteId(null)}>

@@ -9,6 +9,7 @@ import {
   userTagRelations, InsertUserTagRelation,
   connectionLogs, InsertConnectionLog,
   dynamicLinks, InsertDynamicLink,
+  deviceLinkActivations, DeviceLinkActivation, InsertDeviceLinkActivation,
   checkins, InsertCheckin,
   checkinSchedules, InsertCheckinSchedule,
   automaticCheckins, InsertAutomaticCheckin,
@@ -411,8 +412,8 @@ export async function createDynamicLink(link: InsertDynamicLink) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
-  const result = await db.insert(dynamicLinks).values(link).returning({ id: dynamicLinks.id });
-  return { id: result[0].id };
+  const result = await db.insert(dynamicLinks).values(link).returning();
+  return result[0];
 }
 
 export async function getDynamicLinkByShortCode(shortCode: string) {
@@ -421,6 +422,16 @@ export async function getDynamicLinkByShortCode(shortCode: string) {
   
   const result = await db.select().from(dynamicLinks)
     .where(eq(dynamicLinks.shortCode, shortCode))
+    .limit(1);
+  return result[0];
+}
+
+export async function getDynamicLinkById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db.select().from(dynamicLinks)
+    .where(eq(dynamicLinks.id, id))
     .limit(1);
   return result[0];
 }
@@ -462,6 +473,85 @@ export async function deleteDynamicLink(id: number) {
   if (!db) throw new Error("Database not available");
   
   await db.delete(dynamicLinks).where(eq(dynamicLinks.id, id));
+}
+
+export type DeviceLinkActivationRow = DeviceLinkActivation;
+
+export async function setActiveDeviceLink(entry: {
+  deviceId: string;
+  linkId: number;
+  targetUrl: string;
+  tagId?: number | null;
+  nfcUserId?: number | null;
+  expiresAt: Date;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const values = {
+    deviceId: entry.deviceId,
+    linkId: entry.linkId,
+    nfcUserId: entry.nfcUserId ?? null,
+    tagId: entry.tagId ?? null,
+    targetUrl: entry.targetUrl,
+    expiresAt: entry.expiresAt,
+  };
+
+  if (entry.tagId == null) {
+    await db.insert(deviceLinkActivations)
+      .values(values)
+      .onConflictDoUpdate({
+        target: deviceLinkActivations.deviceId,
+        set: {
+          linkId: entry.linkId,
+          nfcUserId: entry.nfcUserId ?? null,
+          tagId: entry.tagId ?? null,
+          targetUrl: entry.targetUrl,
+          expiresAt: entry.expiresAt,
+          createdAt: sql`now()`,
+        },
+      });
+    return;
+  }
+
+  await db.insert(deviceLinkActivations)
+    .values(values)
+    .onConflictDoUpdate({
+      target: [deviceLinkActivations.deviceId, deviceLinkActivations.tagId],
+      set: {
+        linkId: entry.linkId,
+        nfcUserId: entry.nfcUserId ?? null,
+        tagId: entry.tagId ?? null,
+        targetUrl: entry.targetUrl,
+        expiresAt: entry.expiresAt,
+        createdAt: sql`now()`,
+      },
+    });
+}
+
+export async function getActiveDeviceLink(deviceId: string) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const now = new Date();
+  const result = await db.select()
+    .from(deviceLinkActivations)
+    .where(
+      and(
+        eq(deviceLinkActivations.deviceId, deviceId),
+        gte(deviceLinkActivations.expiresAt, now)
+      )
+    )
+    .orderBy(desc(deviceLinkActivations.createdAt))
+    .limit(1);
+
+  return result[0] || null;
+}
+
+export async function clearActiveDeviceLink(deviceId: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(deviceLinkActivations).where(eq(deviceLinkActivations.deviceId, deviceId));
 }
 
 // ============ CHECK-IN FUNCTIONS ============
@@ -525,6 +615,16 @@ export async function getAllCheckins(limit = 100) {
     nfcUser: r.userName || r.userEmail ? { name: r.userName, email: r.userEmail } : null,
     tag: r.tagUid ? { uid: r.tagUid, name: r.tagName } : null,
   }));
+}
+
+export async function getDeviceLinkActivationsByLinkId(linkId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db.select()
+    .from(deviceLinkActivations)
+    .where(eq(deviceLinkActivations.linkId, linkId))
+    .orderBy(desc(deviceLinkActivations.createdAt));
 }
 
 export async function getCheckinStats() {
@@ -1261,6 +1361,218 @@ export async function getUnifiedCheckinsPaginated(page = 1, pageSize = 25) {
     page,
     pageSize,
     totalPages,
+  };
+}
+
+export interface ConnectionLogHistoryParams {
+  nfcUserId: number;
+  startDate?: Date;
+  endDate?: Date;
+  limit?: number;
+}
+
+export interface ConnectionLogHistoryItem {
+  id: number;
+  tagId: number | null;
+  action: string;
+  ipAddress: string | null;
+  userAgent: string | null;
+  metadata: string | null;
+  createdAt: Date;
+  deviceName?: string | null;
+  deviceId?: string | null;
+}
+
+export async function getConnectionLogHistoryByUser(params: ConnectionLogHistoryParams) {
+  const db = await getDb();
+  if (!db) {
+    return { items: [], total: 0 };
+  }
+
+  const limit = Math.max(1, Math.min(params.limit ?? 50, 200));
+  const startDate = params.startDate
+    ? new Date(params.startDate)
+    : (() => {
+        const start = new Date();
+        start.setHours(0, 0, 0, 0);
+        return start;
+      })();
+  const endDate = params.endDate
+    ? new Date(params.endDate)
+    : (() => {
+        const end = new Date();
+        end.setHours(23, 59, 59, 999);
+        return end;
+      })();
+
+  const result = await db
+    .select({
+      id: connectionLogs.id,
+      tagId: connectionLogs.tagId,
+      action: connectionLogs.action,
+      ipAddress: connectionLogs.ipAddress,
+      userAgent: connectionLogs.userAgent,
+      metadata: connectionLogs.metadata,
+      createdAt: connectionLogs.createdAt,
+      deviceName: nfcUsers.name,
+      deviceId: nfcUsers.deviceId,
+    })
+    .from(connectionLogs)
+    .leftJoin(nfcUsers, eq(connectionLogs.nfcUserId, nfcUsers.id))
+    .where(
+      and(
+        eq(connectionLogs.nfcUserId, params.nfcUserId),
+        gte(connectionLogs.createdAt, startDate),
+        lte(connectionLogs.createdAt, endDate)
+      )
+    )
+    .orderBy(desc(connectionLogs.createdAt))
+    .limit(limit);
+
+  return {
+    items: result,
+    total: result.length,
+  };
+}
+
+export interface CheckinHistoryParams {
+  nfcUserId: number;
+  startDate?: Date;
+  endDate?: Date;
+  insideSchedule?: boolean;
+  limit?: number;
+}
+
+export interface CheckinHistoryItem {
+  id: number;
+  type: "manual" | "automatic";
+  tagId: number;
+  tagName?: string | null;
+  tagUid?: string | null;
+  distanceMeters: number | null;
+  isWithinRadius: boolean;
+  createdAt: Date;
+  insideSchedule: boolean;
+  scheduleId: number | null;
+  scheduleName: string | null;
+  scheduleStartTime: string | null;
+  scheduleEndTime: string | null;
+}
+
+export async function getCheckinHistoryByUser(params: CheckinHistoryParams) {
+  const db = await getDb();
+  if (!db) {
+    return { items: [], total: 0 };
+  }
+
+  const limit = Math.max(1, Math.min(params.limit ?? 50, 200));
+  const startDate = params.startDate
+    ? new Date(params.startDate)
+    : (() => {
+        const start = new Date();
+        start.setHours(0, 0, 0, 0);
+        return start;
+      })();
+  const endDate = params.endDate
+    ? new Date(params.endDate)
+    : (() => {
+        const end = new Date();
+        end.setHours(23, 59, 59, 999);
+        return end;
+      })();
+
+  const manualRows = await db.select({
+    id: checkins.id,
+    type: sql<string>`'manual'`.as("type"),
+    tagId: checkins.tagId,
+    distanceMeters: checkins.distanceMeters,
+    isWithinRadius: checkins.isWithinRadius,
+    createdAt: checkins.createdAt,
+    tagUid: nfcTags.uid,
+    tagName: nfcTags.name,
+    deviceInfo: checkins.deviceInfo,
+  })
+    .from(checkins)
+    .leftJoin(nfcTags, eq(checkins.tagId, nfcTags.id))
+    .where(
+      and(
+        eq(checkins.nfcUserId, params.nfcUserId),
+        gte(checkins.createdAt, startDate),
+        lte(checkins.createdAt, endDate)
+      )
+    )
+    .orderBy(desc(checkins.createdAt))
+    .limit(limit);
+
+  const autoRows = await db.select({
+    id: automaticCheckins.id,
+    type: sql<string>`'automatic'`.as("type"),
+    tagId: automaticCheckins.tagId,
+    scheduleId: automaticCheckins.scheduleId,
+    distanceMeters: automaticCheckins.distanceMeters,
+    isWithinRadius: automaticCheckins.isWithinRadius,
+    createdAt: automaticCheckins.checkinTime,
+    tagUid: nfcTags.uid,
+    tagName: nfcTags.name,
+    scheduleName: checkinSchedules.name,
+    scheduleStartTime: checkinSchedules.startTime,
+    scheduleEndTime: checkinSchedules.endTime,
+  })
+    .from(automaticCheckins)
+    .leftJoin(nfcTags, eq(automaticCheckins.tagId, nfcTags.id))
+    .leftJoin(checkinSchedules, eq(automaticCheckins.scheduleId, checkinSchedules.id))
+    .where(
+      and(
+        eq(automaticCheckins.nfcUserId, params.nfcUserId),
+        gte(automaticCheckins.checkinTime, startDate),
+        lte(automaticCheckins.checkinTime, endDate)
+      )
+    )
+    .orderBy(desc(automaticCheckins.checkinTime))
+    .limit(limit);
+
+  const combined: CheckinHistoryItem[] = [
+    ...manualRows.map((row) => ({
+      id: row.id,
+      type: "manual",
+      tagId: row.tagId,
+      tagName: row.tagName,
+      tagUid: row.tagUid,
+      distanceMeters: row.distanceMeters,
+      isWithinRadius: row.isWithinRadius,
+      createdAt: row.createdAt,
+      insideSchedule: row.deviceInfo === "manual-schedule",
+      scheduleId: null,
+      scheduleName: null,
+      scheduleStartTime: null,
+      scheduleEndTime: null,
+    })),
+    ...autoRows.map((row) => ({
+      id: row.id,
+      type: "automatic",
+      tagId: row.tagId,
+      tagName: row.tagName,
+      tagUid: row.tagUid,
+      distanceMeters: row.distanceMeters,
+      isWithinRadius: row.isWithinRadius,
+      createdAt: row.createdAt,
+      insideSchedule: true,
+      scheduleId: row.scheduleId,
+      scheduleName: row.scheduleName,
+      scheduleStartTime: row.scheduleStartTime,
+      scheduleEndTime: row.scheduleEndTime,
+    })),
+  ];
+
+  const sorted = combined.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  const filtered =
+    params.insideSchedule === undefined
+      ? sorted
+      : sorted.filter((entry) => entry.insideSchedule === params.insideSchedule);
+
+  return {
+    items: filtered.slice(0, limit),
+    total: filtered.length,
   };
 }
 

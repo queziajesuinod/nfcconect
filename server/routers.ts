@@ -11,8 +11,9 @@ import {
   createNfcUser, getNfcUserByDeviceId, getNfcUserById, getAllNfcUsers, updateNfcUser, validateNfcUser, deleteNfcUser,
   getUserTagRelation, createUserTagRelation, updateUserTagRelation, getAllNfcUsersByTagId, getTagsByUserId,
   createConnectionLog, getConnectionLogs, getConnectionLogsByTagId, getConnectionLogsByUserId,
-  createDynamicLink, getDynamicLinkByShortCode, getDynamicLinksByUserId, getAllDynamicLinks, updateDynamicLink, incrementLinkClickCount, deleteDynamicLink,
-  createCheckin, getCheckinsByTagId, getCheckinsByUserId, getAllCheckins, getCheckinStats,
+  createDynamicLink, getDynamicLinkByShortCode, getDynamicLinkById, getDynamicLinksByUserId, getAllDynamicLinks, updateDynamicLink, incrementLinkClickCount, deleteDynamicLink,
+  createCheckin, getCheckinHistoryByUser, getConnectionLogHistoryByUser, getCheckinsByTagId, getCheckinsByUserId, getAllCheckins, getCheckinStats,
+  setActiveDeviceLink, getActiveDeviceLink, clearActiveDeviceLink, getDeviceLinkActivationsByLinkId,
   getStats,
   createCheckinSchedule, getCheckinScheduleById, getCheckinSchedulesByTagId, getAllCheckinSchedules, getActiveSchedulesForDay, updateCheckinSchedule, deleteCheckinSchedule,
   createAutomaticCheckin, getAllAutomaticCheckins, getAutomaticCheckinsByScheduleId, updateAutomaticCheckinStatus, hasUserCheckinForScheduleToday,
@@ -386,6 +387,14 @@ export const appRouter = router({
       return getAllDynamicLinks();
     }),
 
+    activations: adminProcedure
+      .input(z.object({ shortCode: z.string().min(1) }))
+      .query(async ({ input }) => {
+        const link = await getDynamicLinkByShortCode(input.shortCode);
+        if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Link não encontrado" });
+        return getDeviceLinkActivationsByLinkId(link.id);
+      }),
+
     byUser: adminProcedure
       .input(z.object({ nfcUserId: z.number() }))
       .query(async ({ input }) => {
@@ -407,17 +416,85 @@ export const appRouter = router({
 
     create: adminProcedure
       .input(z.object({
-        nfcUserId: z.number(),
+        nfcUserId: z.number().optional(),
+        groupId: z.number().optional(),
         targetUrl: z.string().url(),
         title: z.string().optional(),
         expiresAt: z.date().optional(),
+      }).refine((data) => data.nfcUserId || data.groupId, {
+        message: 'Selecione um usuário ou grupo',
       }))
       .mutation(async ({ input }) => {
-        const shortCode = nanoid(8);
-        return createDynamicLink({
-          ...input,
-          shortCode,
-        });
+        const targetUserIds = new Set<number>();
+
+        if (input.nfcUserId) {
+          targetUserIds.add(input.nfcUserId);
+        }
+
+        if (input.groupId) {
+          const groupMembers = await getGroupUsers(input.groupId);
+          groupMembers.forEach((member) => targetUserIds.add(member.nfcUserId));
+        }
+
+        if (targetUserIds.size === 0) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Nenhum usuário encontrado para o link' });
+        }
+
+        const createdLinks = [];
+        for (const userId of targetUserIds) {
+          const link = await createDynamicLink({
+            nfcUserId: userId,
+            shortCode: nanoid(8),
+            targetUrl: input.targetUrl,
+            title: input.title,
+            expiresAt: input.expiresAt,
+          });
+          createdLinks.push(link);
+        }
+
+        return {
+          success: true,
+          createdLinks,
+        };
+      }),
+
+    activateForDevice: adminProcedure
+      .input(z.object({
+        shortCode: z.string().min(1),
+        deviceIds: z.array(z.string().min(1)).min(1),
+        tagIds: z.array(z.number()).optional(),
+        expiresInMinutes: z.number().min(1).max(60).default(10),
+      }))
+      .mutation(async ({ input }) => {
+        const link = await getDynamicLinkByShortCode(input.shortCode);
+        if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Link não encontrado" });
+        if (!link.isActive) throw new TRPCError({ code: "FORBIDDEN", message: "Link desativado" });
+        if (link.expiresAt && link.expiresAt < new Date()) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Link expirado" });
+        }
+
+        const expiresAt = new Date(Date.now() + input.expiresInMinutes * 60 * 1000);
+
+        const tagList = input.tagIds?.length ? input.tagIds : [null];
+        for (const deviceId of input.deviceIds) {
+          for (const tagId of tagList) {
+            await setActiveDeviceLink({
+              deviceId,
+              linkId: link.id,
+              targetUrl: link.targetUrl,
+              tagId: tagId ?? null,
+              nfcUserId: link.nfcUserId,
+              expiresAt,
+            });
+          }
+        }
+
+        return {
+          success: true,
+          targetUrl: link.targetUrl,
+          expiresAt,
+          shortCode: link.shortCode,
+        };
       }),
 
     update: adminProcedure
@@ -528,6 +605,44 @@ export const appRouter = router({
           radiusMeters: tag.radiusMeters || 100,
           user: nfcUser,
         };
+    }),
+
+    history: adminProcedure
+      .input(z.object({
+        nfcUserId: z.number(),
+        startDate: z.string().optional(),
+        endDate: z.string().optional(),
+        insideSchedule: z.boolean().optional(),
+        limit: z.number().min(1).max(200).default(50),
+      }))
+      .query(async ({ input }) => {
+        const startDate = input.startDate ? new Date(input.startDate) : undefined;
+        const endDate = input.endDate ? new Date(input.endDate) : undefined;
+        return getCheckinHistoryByUser({
+          nfcUserId: input.nfcUserId,
+          startDate,
+          endDate,
+          insideSchedule: input.insideSchedule,
+          limit: input.limit,
+        });
+      }),
+
+    logs: adminProcedure
+      .input(z.object({
+        nfcUserId: z.number(),
+        startDate: z.string().optional(),
+        endDate: z.string().optional(),
+        limit: z.number().min(1).max(200).default(50),
+      }))
+      .query(async ({ input }) => {
+        const startDate = input.startDate ? new Date(input.startDate) : undefined;
+        const endDate = input.endDate ? new Date(input.endDate) : undefined;
+        return getConnectionLogHistoryByUser({
+          nfcUserId: input.nfcUserId,
+          startDate,
+          endDate,
+          limit: input.limit,
+        });
       }),
 
     // Admin: list all check-ins (unified manual + automatic)
@@ -591,11 +706,16 @@ export const appRouter = router({
         latitude: z.string(),
         longitude: z.string(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const now = getCampoGrandeTime();
         const currentDay = now.getDay();
         const currentMinutes = now.getHours() * 60 + now.getMinutes();
-        
+
+        const nfcUser = await getNfcUserById(input.nfcUserId);
+        if (!nfcUser) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Usuário NFC não encontrado' });
+        }
+
         // Check if there's an active schedule for this tag
         const schedule = await getActiveScheduleForTag(input.tagId, currentDay, currentMinutes);
         
@@ -634,6 +754,26 @@ export const appRouter = router({
           distanceMeters = Math.round(calculateDistance(tagLat, tagLon, userLat, userLon));
           isWithinRadius = distanceMeters <= (tag.radiusMeters || 100);
         }
+
+        const activation = await getActiveDeviceLink(nfcUser.deviceId);
+        let activatedLink: {
+          linkId: number;
+          targetUrl: string;
+          shortCode: string | null;
+          title: string | null;
+          expiresAt: Date;
+        } | null = null;
+
+        if (activation) {
+          const linkRecord = await getDynamicLinkById(activation.linkId);
+          activatedLink = {
+            linkId: activation.linkId,
+            targetUrl: activation.targetUrl,
+            shortCode: linkRecord?.shortCode ?? null,
+            title: linkRecord?.title ?? null,
+            expiresAt: activation.expiresAt,
+          };
+        }
         
         // Create automatic check-in record (same table as automatic check-ins for unified view)
         const result = await createAutomaticCheckin({
@@ -650,7 +790,41 @@ export const appRouter = router({
           checkinTime: now,
           status: 'completed',
         });
+
+        const manualDeviceInfo = activatedLink ? `manual-schedule/link-${activatedLink.linkId}` : "manual-schedule";
+        const metadataPayload: Record<string, unknown> = {
+          distanceMeters,
+          isWithinRadius,
+        };
+
+        if (activatedLink) {
+          metadataPayload.activatedLinkId = activatedLink.linkId;
+          metadataPayload.activatedLinkTargetUrl = activatedLink.targetUrl;
+        }
+
+        // Persist manual copy for reporting/kpi
+        await createCheckin({
+          tagId: input.tagId,
+          nfcUserId: input.nfcUserId,
+          latitude: input.latitude,
+          longitude: input.longitude,
+          distanceMeters,
+          isWithinRadius,
+          deviceInfo: manualDeviceInfo,
+          ipAddress: ctx.req.ip || ctx.req.headers['x-forwarded-for'] as string || null,
+        });
         
+        await createConnectionLog({
+          tagId: tag.id,
+          nfcUserId: input.nfcUserId,
+          action: 'checkin',
+          ipAddress: ctx.req.ip || ctx.req.headers['x-forwarded-for'] as string || null,
+          userAgent: ctx.req.headers['user-agent'] || null,
+          latitude: input.latitude,
+          longitude: input.longitude,
+          metadata: JSON.stringify(metadataPayload),
+        });
+
         // Auto-associate user to groups linked to this schedule
         try {
           await autoAddUserToScheduleGroups(input.nfcUserId, schedule.id);
@@ -666,6 +840,7 @@ export const appRouter = router({
           isWithinRadius,
           radiusMeters: tag.radiusMeters || 100,
           scheduleName: schedule.name,
+          activatedLink,
         };
       }),
 

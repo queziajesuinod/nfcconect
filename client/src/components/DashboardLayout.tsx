@@ -22,7 +22,7 @@ import {
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import { useAuth } from "@/hooks/useAuth";
-import { LayoutDashboard, LogOut, PanelLeft, Users, Nfc, Activity, Link2, MapPin, CalendarClock, Radio, Users2 } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Users, Nfc, Activity, Link2, MapPin, CalendarClock, Radio, Users2, Search } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -34,6 +34,7 @@ const menuItems = [
   { icon: Nfc, label: "TAGS NFC", path: "/dashboard/tags" },
   { icon: Users, label: "USUÁRIOS", path: "/dashboard/users" },
   { icon: MapPin, label: "CHECK-INS", path: "/dashboard/checkins" },
+  { icon: Search, label: "HISTÓRICO", path: "/dashboard/checkins/history" },
   { icon: CalendarClock, label: "AGENDAMENTOS", path: "/dashboard/schedules" },
   { icon: Users2, label: "GRUPOS", path: "/dashboard/groups" },
   { icon: Activity, label: "LOGS", path: "/dashboard/logs" },

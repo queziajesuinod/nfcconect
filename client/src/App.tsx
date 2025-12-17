@@ -17,6 +17,7 @@ import Checkins from "./pages/Checkins";
 import Schedules from "./pages/Schedules";
 import UserApp from "./pages/UserApp";
 import RealtimePanel from "./pages/RealtimePanel";
+import CheckinHistory from "./pages/CheckinHistory";
 import Groups from "./pages/Groups";
 import GroupDetails from "./pages/GroupDetails";
 import { Login } from "./pages/Login";
@@ -63,6 +64,11 @@ function Router() {
       <Route path="/dashboard/checkins">
         <ProtectedRoute>
           <Checkins />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/dashboard/checkins/history">
+        <ProtectedRoute>
+          <CheckinHistory />
         </ProtectedRoute>
       </Route>
       <Route path="/dashboard/schedules">

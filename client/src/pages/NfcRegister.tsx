@@ -63,6 +63,15 @@ export default function NfcRegister() {
     { enabled: !!tagUid && !!deviceId }
   );
 
+  const redirectToDestination = (target?: string | null) => {
+    const destination = target || checkData?.redirectUrl || redirectUrl;
+    if (destination) {
+      setTimeout(() => {
+        window.location.href = destination;
+      }, 2000);
+    }
+  };
+
   // Check if there's an active schedule for this tag
   const { data: scheduleData } = trpc.checkins.getActiveSchedule.useQuery(
     { tagId: checkData?.tag?.id || 0 },
@@ -100,11 +109,7 @@ export default function NfcRegister() {
         toast.warning(`Check-in registrado! Você está a ${result.distanceMeters}m (fora do raio)`);
       }
       // Auto-redirect after successful check-in
-      if (checkData?.redirectUrl) {
-        setTimeout(() => {
-          window.location.href = checkData.redirectUrl!;
-        }, 2000);
-      }
+      redirectToDestination(result.activatedLink?.targetUrl);
     },
     onError: (error) => {
       setAutoCheckinStatus('failed');
@@ -247,11 +252,7 @@ export default function NfcRegister() {
             toast.warning(`Check-in registrado! Você está a ${result.distanceMeters}m (fora do raio)`);
           }
           // Redirect after check-in
-          if (redirectUrl) {
-            setTimeout(() => {
-              window.location.href = redirectUrl;
-            }, 2000);
-          }
+          redirectToDestination(result.activatedLink?.targetUrl);
         },
         onError: (error) => {
           setNewUserCheckinPending(false);
