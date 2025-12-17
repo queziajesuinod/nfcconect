@@ -5,6 +5,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { startAutomaticCheckinCron } from "../services/automaticCheckinCron";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -58,6 +59,11 @@ async function startServer() {
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
+    
+    // Inicializar cron job de check-ins automáticos
+    console.log('\n' + '='.repeat(80));
+    startAutomaticCheckinCron();
+    console.log('='.repeat(80) + '\n');
   });
 }
 
