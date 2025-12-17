@@ -831,6 +831,25 @@ export async function getAllCheckinSchedules() {
   }));
 }
 
+export async function getActiveCheckinSchedules() {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return db.select({
+    id: checkinSchedules.id,
+    name: checkinSchedules.name,
+    description: checkinSchedules.description,
+    daysOfWeek: checkinSchedules.daysOfWeek,
+    startTime: checkinSchedules.startTime,
+    endTime: checkinSchedules.endTime,
+    isActive: checkinSchedules.isActive,
+    timezone: checkinSchedules.timezone,
+  })
+    .from(checkinSchedules)
+    .where(eq(checkinSchedules.isActive, true))
+    .orderBy(desc(checkinSchedules.createdAt));
+}
+
 export async function getActiveSchedulesForDay(dayOfWeek: number) {
   const db = await getDb();
   if (!db) return [];
