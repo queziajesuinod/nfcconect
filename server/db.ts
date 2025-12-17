@@ -537,103 +537,45 @@ export async function getActiveDeviceLink(deviceId: string, tagId?: number | nul
 
   const now = new Date();
   
-  // Get user ID from device ID to check for group memberships
-  const user = await getNfcUserByDeviceId(deviceId);
-  const nfcUserId = user?.id;
+  // SIMPLIFIED PRIORITY HIERARCHY:
+  // 1. Link with specific tag (if tagId provided)
+  // 2. Link with global tag (no tag specified)
+  // 3. Fallback: tag default URL (handled by caller)
   
-  // PRIORITY HIERARCHY:
-  // 1. Individual user link + specific tag
-  // 2. Individual user link + global (no tag)
-  // 3. Group link + specific tag (if user is in group)
-  // 4. Group link + global (if user is in group)
-  // 5. Fallback: tag default URL (handled by caller)
-  
-  // Priority 1: Individual user link + specific tag
-  if (tagId != null && nfcUserId) {
-    const individualSpecificResult = await db.select()
+  // Priority 1: Link with specific tag
+  if (tagId != null) {
+    const specificTagResult = await db.select()
       .from(deviceLinkActivations)
-      .innerJoin(dynamicLinks, eq(deviceLinkActivations.linkId, dynamicLinks.id))
       .where(
         and(
           eq(deviceLinkActivations.deviceId, deviceId),
           eq(deviceLinkActivations.tagId, tagId),
-          eq(dynamicLinks.nfcUserId, nfcUserId),
-          sql`${dynamicLinks.groupId} is null`,
           gte(deviceLinkActivations.expiresAt, now)
         )
       )
       .orderBy(desc(deviceLinkActivations.createdAt))
       .limit(1);
     
-    if (individualSpecificResult[0]) {
-      return individualSpecificResult[0].device_link_activations;
+    if (specificTagResult[0]) {
+      return specificTagResult[0];
     }
   }
   
-  // Priority 2: Individual user link + global (no tag)
-  if (nfcUserId) {
-    const individualGlobalResult = await db.select()
-      .from(deviceLinkActivations)
-      .innerJoin(dynamicLinks, eq(deviceLinkActivations.linkId, dynamicLinks.id))
-      .where(
-        and(
-          eq(deviceLinkActivations.deviceId, deviceId),
-          sql`${deviceLinkActivations.tagId} is null`,
-          eq(dynamicLinks.nfcUserId, nfcUserId),
-          sql`${dynamicLinks.groupId} is null`,
-          gte(deviceLinkActivations.expiresAt, now)
-        )
+  // Priority 2: Link with global tag (no tag)
+  const globalResult = await db.select()
+    .from(deviceLinkActivations)
+    .where(
+      and(
+        eq(deviceLinkActivations.deviceId, deviceId),
+        sql`${deviceLinkActivations.tagId} is null`,
+        gte(deviceLinkActivations.expiresAt, now)
       )
-      .orderBy(desc(deviceLinkActivations.createdAt))
-      .limit(1);
-    
-    if (individualGlobalResult[0]) {
-      return individualGlobalResult[0].device_link_activations;
-    }
-  }
+    )
+    .orderBy(desc(deviceLinkActivations.createdAt))
+    .limit(1);
   
-  // Priority 3: Group link + specific tag
-  if (tagId != null && nfcUserId) {
-    const groupSpecificResult = await db.select()
-      .from(deviceLinkActivations)
-      .innerJoin(dynamicLinks, eq(deviceLinkActivations.linkId, dynamicLinks.id))
-      .where(
-        and(
-          eq(deviceLinkActivations.deviceId, deviceId),
-          eq(deviceLinkActivations.tagId, tagId),
-          sql`${dynamicLinks.groupId} is not null`,
-          sql`${dynamicLinks.nfcUserId} is null`,
-          gte(deviceLinkActivations.expiresAt, now)
-        )
-      )
-      .orderBy(desc(deviceLinkActivations.createdAt))
-      .limit(1);
-    
-    if (groupSpecificResult[0]) {
-      return groupSpecificResult[0].device_link_activations;
-    }
-  }
-  
-  // Priority 4: Group link + global (no tag)
-  if (nfcUserId) {
-    const groupGlobalResult = await db.select()
-      .from(deviceLinkActivations)
-      .innerJoin(dynamicLinks, eq(deviceLinkActivations.linkId, dynamicLinks.id))
-      .where(
-        and(
-          eq(deviceLinkActivations.deviceId, deviceId),
-          sql`${deviceLinkActivations.tagId} is null`,
-          sql`${dynamicLinks.groupId} is not null`,
-          sql`${dynamicLinks.nfcUserId} is null`,
-          gte(deviceLinkActivations.expiresAt, now)
-        )
-      )
-      .orderBy(desc(deviceLinkActivations.createdAt))
-      .limit(1);
-    
-    if (groupGlobalResult[0]) {
-      return groupGlobalResult[0].device_link_activations;
-    }
+  if (globalResult[0]) {
+    return globalResult[0];
   }
 
   return null;
