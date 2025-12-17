@@ -125,7 +125,24 @@ export default function Links() {
       setIsActivationOpen(false);
       setActivationLink(null);
       setActivationForm(initialActivationForm);
+      setSelectedDeviceIds([]);
+      setSelectedTagIds([]);
       toast.success("Link ativado para o dispositivo!");
+      refetchActivations();
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
+
+  const activateGroupMutation = trpc.links.activateForGroup.useMutation({
+    onSuccess: (data) => {
+      utils.links.list.invalidate();
+      setIsActivationOpen(false);
+      setActivationLink(null);
+      setActivationForm(initialActivationForm);
+      setSelectedTagIds([]);
+      toast.success(`Link ativado para ${data.groupMemberCount} usuários do grupo!`);
       refetchActivations();
     },
     onError: (error) => {
@@ -184,6 +201,28 @@ export default function Links() {
   const handleActivateForDevice = () => {
     if (!activationLink) return;
 
+    const pendingTagIds = tagInput
+      .split(/[\s,;]+/)
+      .map((item) => Number(item.trim()))
+      .filter((value) => !Number.isNaN(value));
+    const tagIds = Array.from(new Set([...selectedTagIds, ...pendingTagIds]));
+
+    if (pendingTagIds.length) {
+      setSelectedTagIds(tagIds);
+      setTagInput("");
+    }
+
+    // If link is for a group, use activateForGroup endpoint
+    if (activationLink.groupId) {
+      activateGroupMutation.mutate({
+        shortCode: activationLink.shortCode,
+        tagIds: tagIds.length ? tagIds : undefined,
+        expiresInMinutes: activationForm.expiresInMinutes,
+      });
+      return;
+    }
+
+    // Otherwise, use activateForDevice endpoint for individual users
     const pendingDeviceIds = deviceInput
       .split(/[\s,;]+/)
       .map((item) => item.trim())
@@ -202,21 +241,10 @@ export default function Links() {
       return;
     }
 
-    const pendingTagIds = tagInput
-      .split(/[\s,;]+/)
-      .map((item) => Number(item.trim()))
-      .filter((value) => !Number.isNaN(value));
-    const tagIds = Array.from(new Set([...selectedTagIds, ...pendingTagIds]));
-
-    if (pendingTagIds.length) {
-      setSelectedTagIds(tagIds);
-      setTagInput("");
-    }
-
     activateMutation.mutate({
       shortCode: activationLink.shortCode,
       deviceIds,
-            tagIds: tagIds.length ? tagIds : undefined,
+      tagIds: tagIds.length ? tagIds : undefined,
       expiresInMinutes: activationForm.expiresInMinutes,
     });
   };
@@ -463,7 +491,11 @@ export default function Links() {
                       </a>
                       
                       <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                        <span>Usuário #{link.nfcUserId}</span>
+                        {link.groupId ? (
+                          <span className="px-2 py-1 bg-blue-100 text-blue-800 font-bold rounded">GRUPO #{link.groupId}</span>
+                        ) : (
+                          <span>Usuário #{link.nfcUserId}</span>
+                        )}
                         <span className="flex items-center gap-1">
                           <MousePointer className="w-3 h-3" /> {link.clickCount} cliques
                         </span>
@@ -580,8 +612,20 @@ export default function Links() {
             )}
           </DialogHeader>
           <div className="space-y-4 mt-4">
-            <div>
-              <Label className="font-bold uppercase text-sm">Dispositivos NFC *</Label>
+            {activationLink?.groupId && (
+              <div className="p-4 bg-blue-50 border-2 border-blue-600 rounded">
+                <p className="text-sm font-bold text-blue-900">
+                  👥 Link de Grupo - Ativação Automática
+                </p>
+                <p className="text-xs text-blue-700 mt-1">
+                  Este link será ativado automaticamente para todos os usuários do grupo.
+                  Não é necessário selecionar dispositivos individualmente.
+                </p>
+              </div>
+            )}
+            {!activationLink?.groupId && (
+              <div>
+                <Label className="font-bold uppercase text-sm">Dispositivos NFC *</Label>
               <div className="flex gap-2 mt-1">
                 <Input
                   list="device-suggestions"
@@ -639,7 +683,8 @@ export default function Links() {
               <p className="text-xs text-gray-500 mt-1">
                 Também é possível colar os dispositivos cadastrados acima. Separe múltiplos IDs por espaço, vírgula ou enter.
               </p>
-            </div>
+              </div>
+            )}
             {activationRecords && activationRecords.length > 0 && (
               <div className="border-2 border-dashed border-gray-300 rounded-md p-3 bg-gray-50">
                 <p className="text-xs uppercase font-semibold text-gray-500 mb-2">
@@ -740,10 +785,10 @@ export default function Links() {
             </div>
             <Button
               onClick={handleActivateForDevice}
-              disabled={activateMutation.isPending}
+              disabled={activateMutation.isPending || activateGroupMutation.isPending}
               className="w-full brutal-shadow-sm hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all font-bold uppercase mt-2"
             >
-              {activateMutation.isPending ? "Ativando..." : "Ativar Link"}
+              {(activateMutation.isPending || activateGroupMutation.isPending) ? "Ativando..." : (activationLink?.groupId ? "Ativar para Grupo" : "Ativar Link")}
             </Button>
           </div>
         </DialogContent>

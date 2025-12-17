@@ -480,37 +480,49 @@ export const appRouter = router({
         message: 'Selecione um usuário ou grupo',
       }))
       .mutation(async ({ input }) => {
-        const targetUserIds = new Set<number>();
-
-        if (input.nfcUserId) {
-          targetUserIds.add(input.nfcUserId);
-        }
-
+        // If groupId is provided, create only ONE link for the group
         if (input.groupId) {
           const groupMembers = await getGroupUsers(input.groupId);
-          groupMembers.forEach((member) => targetUserIds.add(member.nfcUserId));
-        }
+          if (groupMembers.length === 0) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: 'Nenhum usuário encontrado no grupo' });
+          }
 
-        if (targetUserIds.size === 0) {
-          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Nenhum usuário encontrado para o link' });
-        }
-
-        const createdLinks = [];
-        for (const userId of targetUserIds) {
           const link = await createDynamicLink({
-            nfcUserId: userId,
+            groupId: input.groupId,
+            nfcUserId: null,
             shortCode: nanoid(8),
             targetUrl: input.targetUrl,
             title: input.title,
             expiresAt: input.expiresAt,
           });
-          createdLinks.push(link);
+
+          return {
+            success: true,
+            createdLinks: [link],
+            isGroupLink: true,
+            groupMemberCount: groupMembers.length,
+          };
         }
 
-        return {
-          success: true,
-          createdLinks,
-        };
+        // If nfcUserId is provided, create link for individual user
+        if (input.nfcUserId) {
+          const link = await createDynamicLink({
+            nfcUserId: input.nfcUserId,
+            groupId: null,
+            shortCode: nanoid(8),
+            targetUrl: input.targetUrl,
+            title: input.title,
+            expiresAt: input.expiresAt,
+          });
+
+          return {
+            success: true,
+            createdLinks: [link],
+            isGroupLink: false,
+          };
+        }
+
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Selecione um usuário ou grupo' });
       }),
 
     activateForDevice: adminProcedure
@@ -549,6 +561,62 @@ export const appRouter = router({
           targetUrl: link.targetUrl,
           expiresAt,
           shortCode: link.shortCode,
+        };
+      }),
+
+    activateForGroup: adminProcedure
+      .input(z.object({
+        shortCode: z.string().min(1),
+        tagIds: z.array(z.number()).optional(),
+        expiresInMinutes: z.number().min(1).max(60).default(10),
+      }))
+      .mutation(async ({ input }) => {
+        const link = await getDynamicLinkByShortCode(input.shortCode);
+        if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Link não encontrado" });
+        if (!link.isActive) throw new TRPCError({ code: "FORBIDDEN", message: "Link desativado" });
+        if (link.expiresAt && link.expiresAt < new Date()) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Link expirado" });
+        }
+
+        // Must be a group link
+        if (!link.groupId) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Este link não está associado a um grupo. Use activateForDevice para links individuais." });
+        }
+
+        // Get all users from the group
+        const groupMembers = await getGroupUsers(link.groupId);
+        if (groupMembers.length === 0) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Nenhum usuário encontrado no grupo" });
+        }
+
+        const expiresAt = new Date(Date.now() + input.expiresInMinutes * 60 * 1000);
+        const tagList = input.tagIds?.length ? input.tagIds : [null];
+        
+        let activationCount = 0;
+        for (const member of groupMembers) {
+          const user = await getNfcUserById(member.nfcUserId);
+          if (!user?.deviceId) continue;
+
+          for (const tagId of tagList) {
+            await setActiveDeviceLink({
+              deviceId: user.deviceId,
+              linkId: link.id,
+              targetUrl: link.targetUrl,
+              tagId: tagId ?? null,
+              nfcUserId: user.id,
+              expiresAt,
+            });
+            activationCount++;
+          }
+        }
+
+        return {
+          success: true,
+          targetUrl: link.targetUrl,
+          expiresAt,
+          shortCode: link.shortCode,
+          groupMemberCount: groupMembers.length,
+          activationCount,
         };
       }),
 

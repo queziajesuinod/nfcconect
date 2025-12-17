@@ -165,7 +165,8 @@ export type InsertCheckin = typeof checkins.$inferInsert;
  */
 export const dynamicLinks = pgTable("dynamic_links", {
   id: serial("id").primaryKey(),
-  nfcUserId: integer("nfcUserId").notNull(),
+  nfcUserId: integer("nfcUserId"),
+  groupId: integer("groupId"),
   shortCode: varchar("shortCode", { length: 32 }).notNull().unique(),
   targetUrl: text("targetUrl").notNull(),
   title: varchar("title", { length: 255 }),
