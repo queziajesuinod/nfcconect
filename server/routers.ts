@@ -1305,13 +1305,13 @@ export const appRouter = router({
         console.log(`[Auto Check-in] Found ${tagRelations.length} tags`);
 
         let processedCount = 0;
-        const radius = ENV.proximityRadiusMeters;
         const details: Array<{
           userId: number;
           userName: string;
           tagName: string;
           distance: number;
           withinRadius: boolean;
+          tagRadius: number;
         }> = [];
 
         // 4. Para cada tag
@@ -1322,7 +1322,11 @@ export const appRouter = router({
             name: tagRelation.tagName,
             latitude: tagRelation.tagLatitude,
             longitude: tagRelation.tagLongitude,
+            radiusMeters: tagRelation.tagRadiusMeters,
           };
+
+          // Usar raio específico da tag, ou fallback para ENV se não configurado
+          const radius = tag.radiusMeters || ENV.proximityRadiusMeters;
 
           if (!tag.latitude || !tag.longitude) {
             console.log(`[Auto Check-in] Tag ${tag.uid} has no geolocation, skipping`);
@@ -1361,7 +1365,7 @@ export const appRouter = router({
 
             console.log(
               `[Auto Check-in] User ${user.name} is ${distanceRounded}m from tag ${tag.uid} ` +
-              `(radius: ${radius}m, within: ${withinRadius})`
+              `(tag radius: ${radius}m, within: ${withinRadius})`
             );
 
             // Se dentro do raio, registrar check-in
@@ -1398,6 +1402,7 @@ export const appRouter = router({
                 tagName: tag.name || tag.uid || 'Unknown',
                 distance: distanceRounded,
                 withinRadius: true,
+                tagRadius: radius,
               });
             } else {
               console.log(
@@ -1411,6 +1416,7 @@ export const appRouter = router({
                 tagName: tag.name || tag.uid || 'Unknown',
                 distance: distanceRounded,
                 withinRadius: false,
+                tagRadius: radius,
               });
             }
           }
@@ -1426,7 +1432,7 @@ export const appRouter = router({
             tagsProcessed: tagRelations.length,
             usersEvaluated: details.length,
             usersCheckedIn: processedCount,
-            proximityRadius: radius,
+            defaultProximityRadius: ENV.proximityRadiusMeters,
             checkins: details,
           },
         };
