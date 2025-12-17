@@ -1033,6 +1033,46 @@ export async function getUsersByTagIdWithRecentLocation(tagId: number, minutesAg
   return usersWithLocation;
 }
 
+/**
+ * Calculate distance between two geographic points using Haversine formula
+ * @param lat1 Latitude of point 1 (in degrees)
+ * @param lon1 Longitude of point 1 (in degrees)
+ * @param lat2 Latitude of point 2 (in degrees)
+ * @param lon2 Longitude of point 2 (in degrees)
+ * @returns Distance in meters
+ * 
+ * @example
+ * // Campo Grande, MS to a point 100m north
+ * const distance = calculateDistance(-20.4697, -54.6201, -20.4707, -54.6201);
+ * console.log(distance); // ~111 meters
+ */
+export function calculateDistance(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  // Earth radius in meters
+  const R = 6371e3;
+  
+  // Convert degrees to radians
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+
+  // Haversine formula
+  const a =
+    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  // Distance in meters
+  const distance = R * c;
+  
+  return distance;
+}
+
 // Check if user already has a check-in for a schedule on a specific date
 export async function hasUserCheckinForScheduleToday(scheduleId: number, nfcUserId: number, date: Date) {
   const db = await getDb();
