@@ -550,10 +550,7 @@ export async function getActiveDeviceLink(deviceId: string, tagId?: number | nul
   
   // Priority 1: Individual user link + specific tag
   if (tagId != null && nfcUserId) {
-    const individualSpecificResult = await db.select({
-      activation: deviceLinkActivations,
-      link: dynamicLinks,
-    })
+    const individualSpecificResult = await db.select()
       .from(deviceLinkActivations)
       .innerJoin(dynamicLinks, eq(deviceLinkActivations.linkId, dynamicLinks.id))
       .where(
@@ -569,16 +566,13 @@ export async function getActiveDeviceLink(deviceId: string, tagId?: number | nul
       .limit(1);
     
     if (individualSpecificResult[0]) {
-      return individualSpecificResult[0].activation;
+      return individualSpecificResult[0].device_link_activations;
     }
   }
   
   // Priority 2: Individual user link + global (no tag)
   if (nfcUserId) {
-    const individualGlobalResult = await db.select({
-      activation: deviceLinkActivations,
-      link: dynamicLinks,
-    })
+    const individualGlobalResult = await db.select()
       .from(deviceLinkActivations)
       .innerJoin(dynamicLinks, eq(deviceLinkActivations.linkId, dynamicLinks.id))
       .where(
@@ -594,16 +588,13 @@ export async function getActiveDeviceLink(deviceId: string, tagId?: number | nul
       .limit(1);
     
     if (individualGlobalResult[0]) {
-      return individualGlobalResult[0].activation;
+      return individualGlobalResult[0].device_link_activations;
     }
   }
   
   // Priority 3: Group link + specific tag
   if (tagId != null && nfcUserId) {
-    const groupSpecificResult = await db.select({
-      activation: deviceLinkActivations,
-      link: dynamicLinks,
-    })
+    const groupSpecificResult = await db.select()
       .from(deviceLinkActivations)
       .innerJoin(dynamicLinks, eq(deviceLinkActivations.linkId, dynamicLinks.id))
       .where(
@@ -619,16 +610,13 @@ export async function getActiveDeviceLink(deviceId: string, tagId?: number | nul
       .limit(1);
     
     if (groupSpecificResult[0]) {
-      return groupSpecificResult[0].activation;
+      return groupSpecificResult[0].device_link_activations;
     }
   }
   
   // Priority 4: Group link + global (no tag)
   if (nfcUserId) {
-    const groupGlobalResult = await db.select({
-      activation: deviceLinkActivations,
-      link: dynamicLinks,
-    })
+    const groupGlobalResult = await db.select()
       .from(deviceLinkActivations)
       .innerJoin(dynamicLinks, eq(deviceLinkActivations.linkId, dynamicLinks.id))
       .where(
@@ -644,7 +632,7 @@ export async function getActiveDeviceLink(deviceId: string, tagId?: number | nul
       .limit(1);
     
     if (groupGlobalResult[0]) {
-      return groupGlobalResult[0].activation;
+      return groupGlobalResult[0].device_link_activations;
     }
   }
 
