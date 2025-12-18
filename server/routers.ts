@@ -40,6 +40,45 @@ function getCampoGrandeTime(): Date {
 
 // Use protectedProcedure for all admin endpoints
 // If you need role-based access, add a role field to Users table first
+type RedirectTemplateUser = {
+  deviceId?: string | null;
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+};
+
+function buildRedirectTemplateUser(user?: RedirectTemplateUser | null): RedirectTemplateUser | null {
+  if (!user) return null;
+  return {
+    deviceId: user.deviceId ?? null,
+    name: user.name ?? null,
+    email: user.email ?? null,
+    phone: user.phone ?? null,
+  };
+}
+
+function formatRedirectUrl(
+  template: string | null | undefined,
+  user: RedirectTemplateUser | null,
+  overrideDeviceId?: string | null
+) {
+  if (!template) return null;
+  const now = getAmazonTime();
+  const formattedDate = now.toLocaleDateString("pt-BR");
+  const values: Record<string, string> = {
+    deviceId: overrideDeviceId ?? user?.deviceId ?? "",
+    name: user?.name ?? "",
+    email: user?.email ?? "",
+    phone: user?.phone ?? "",
+    date: formattedDate,
+    currentDate: formattedDate,
+  };
+  return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, key) => {
+    const normalized = key.trim();
+    return values[normalized] ?? values[normalized.toLowerCase()] ?? "";
+  });
+}
+
 const adminProcedure = protectedProcedure;
 
 export const appRouter = router({
@@ -184,7 +223,11 @@ export const appRouter = router({
               await incrementLinkClickCount(activeLink.linkId);
             }
             
-            const redirectUrl = activeLink?.targetUrl || tag.redirectUrl;
+            const redirectUrl = formatRedirectUrl(
+              activeLink?.targetUrl || tag.redirectUrl,
+              buildRedirectTemplateUser(existingUser),
+              input.deviceId
+            );
             
             return { 
               exists: true, 
@@ -212,7 +255,11 @@ export const appRouter = router({
               await incrementLinkClickCount(activeLink.linkId);
             }
             
-            const redirectUrl = activeLink?.targetUrl || tag.redirectUrl;
+            const redirectUrl = formatRedirectUrl(
+              activeLink?.targetUrl || tag.redirectUrl,
+              buildRedirectTemplateUser(existingUser),
+              input.deviceId
+            );
             
             // Return as existing user so check-in flow proceeds
             return { 
@@ -286,7 +333,11 @@ export const appRouter = router({
               await incrementLinkClickCount(activeLink.linkId);
             }
             
-            const redirectUrl = activeLink?.targetUrl || tag.redirectUrl;
+            const redirectUrl = formatRedirectUrl(
+              activeLink?.targetUrl || tag.redirectUrl,
+              buildRedirectTemplateUser(existingUser),
+              input.deviceId
+            );
             
             return { 
               isNewUser: false, 
@@ -316,7 +367,11 @@ export const appRouter = router({
               await incrementLinkClickCount(activeLink.linkId);
             }
             
-            const redirectUrl = activeLink?.targetUrl || tag.redirectUrl;
+            const redirectUrl = formatRedirectUrl(
+              activeLink?.targetUrl || tag.redirectUrl,
+              buildRedirectTemplateUser(existingUser),
+              input.deviceId
+            );
             
             return { 
               isNewUser: false, // User already has data, just connected to new tag
@@ -364,7 +419,11 @@ export const appRouter = router({
           await incrementLinkClickCount(activeLink.linkId);
         }
         
-        const redirectUrl = activeLink?.targetUrl || tag.redirectUrl;
+        const redirectUrl = formatRedirectUrl(
+          activeLink?.targetUrl || tag.redirectUrl,
+          buildRedirectTemplateUser(newUser),
+          input.deviceId
+        );
         
         return { 
           isNewUser: true, 

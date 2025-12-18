@@ -30,6 +30,7 @@ import {
 import { trpc } from "@/lib/trpc";
 import { Plus, Pencil, Trash2, Nfc, ExternalLink, Copy, QrCode, MapPin, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
+import RedirectPlaceholders from "@/components/RedirectPlaceholders";
 import { toast } from "sonner";
 
 type TagStatus = "active" | "inactive" | "blocked";
@@ -501,6 +502,7 @@ export default function Tags() {
                   <p className="text-xs text-gray-500 mt-1">
                     URL para onde o usuário será redirecionado após registro.
                   </p>
+                  <RedirectPlaceholders />
                 </div>
                 
                 {/* Location Fields */}
@@ -750,6 +752,7 @@ export default function Tags() {
                   placeholder="https://exemplo.com"
                   className="border-2 border-black rounded-none mt-1"
                 />
+                <RedirectPlaceholders />
               </div>
               
               {/* Location Fields */}

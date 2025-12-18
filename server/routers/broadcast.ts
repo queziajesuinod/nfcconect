@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { router, adminProcedure } from "../_core/trpc";
-import { sendTextMessage, sendMediaMessage, sendAudioMessage } from "../services/evolution";
+import { sendMediaMessage, sendTextMessage, sendWhatsAppAudio } from "../services/evolution";
 import {
   createMessageTemplate,
   updateMessageTemplate,
@@ -33,6 +33,16 @@ type BroadcastRecipient = {
   name?: string | null;
   userId?: number;
   deviceId?: string | null;
+};
+
+type AttachmentPayload = {
+  type: "image" | "audio" | "document";
+  base64: string;
+  mimeType?: string;
+  fileName?: string;
+  caption?: string;
+  mediaType?: "image" | "video" | "document";
+  encoding?: boolean;
 };
 
 const targetSchema = z
@@ -68,6 +78,15 @@ const targetSchema = z
       }
     }
   });
+
+const attachmentSchema = z.object({
+  type: z.enum(["image", "audio", "document"]),
+  base64: z.string().min(1),
+  fileName: z.string().min(1).optional(),
+  mimeType: z.string().min(1).optional(),
+  caption: z.string().optional(),
+  mediaType: z.enum(["image", "video", "document"]).optional(),
+});
 
 function normalizePhoneNumber(raw?: string | null): string | null {
   if (!raw) return null;
@@ -220,12 +239,10 @@ export const broadcastRouter = router({
           target: targetSchema,
           link: z.string().url().optional(),
           delayMs: z.number().min(0).max(120000).optional(),
-          imageBase64: z.string().optional(),
-          imageCaption: z.string().optional(),
-          audioBase64: z.string().optional(),
+          attachments: z.array(attachmentSchema).optional(),
         })
         .superRefine((data, ctx) => {
-          if (!data.content && !data.templateId) {
+          if (!data.content && !data.templateId && !(data.attachments?.length)) {
             ctx.addIssue({
               code: "custom",
               message: "Informe um modelo ou escreva o conteúdo manualmente.",
@@ -266,6 +283,7 @@ export const broadcastRouter = router({
           ? new Date(input.target.scheduleDate).toLocaleDateString("pt-BR")
           : dateLabel;
       const linkValue = input.link?.trim() || "";
+      const attachments = (input.attachments ?? []) as AttachmentPayload[];
       const summaryErrors: Array<{ number: string; message: string }> = [];
       let successes = 0;
       const setting = await getBroadcastSettingByUserId(ctx.user!.id);
@@ -285,55 +303,53 @@ export const broadcastRouter = router({
           ...templateValues,
           link: personalizedLink,
         });
-        try {
-          // Sequência: Texto → delay 10s → Imagem → delay 10s → Áudio
-          const MEDIA_DELAY_MS = 10000; // 10 segundos entre mídias
-          
-          // 1. Enviar texto (se houver)
-          if (message && message.trim()) {
-            await sendTextMessage(integration.instanceName, {
-              number: person.phone,
-              text: message,
-            });
-            
-            // Delay antes da imagem (se houver imagem)
-            if (input.imageBase64) {
-              await new Promise((resolve) => setTimeout(resolve, MEDIA_DELAY_MS));
+          try {
+            if (message && message.trim()) {
+              await sendTextMessage(integration.instanceName, {
+                number: person.phone,
+                text: message,
+              });
             }
-          }
-          
-          // 2. Enviar imagem (se houver)
-          if (input.imageBase64) {
-            await sendMediaMessage(integration.instanceName, {
-              number: person.phone,
-              mediatype: "image",
-              mimetype: "image/jpeg",
-              caption: input.imageCaption || ".",
-              media: input.imageBase64,
-            });
-            
-            // Delay antes do áudio (se houver áudio)
-            if (input.audioBase64) {
-              await new Promise((resolve) => setTimeout(resolve, MEDIA_DELAY_MS));
+            for (const attachment of attachments) {
+              try {
+                if (attachment.type === "audio") {
+                  await sendWhatsAppAudio(integration.instanceName, {
+                    number: person.phone,
+                    audio: attachment.base64,
+                    encoding: attachment.encoding ?? true,
+                  });
+                  continue;
+                }
+                await sendMediaMessage(integration.instanceName, {
+                  number: person.phone,
+                  base64: attachment.base64,
+                  fileName: attachment.fileName,
+                  mimeType:
+                    attachment.mimeType ??
+                    (attachment.mediaType === "video"
+                      ? "video/mp4"
+                      : attachment.mediaType === "document"
+                      ? "application/pdf"
+                      : "image/jpeg"),
+                  caption: attachment.caption,
+                  mediaType: attachment.mediaType ?? "image",
+                });
+              } catch (mediaError) {
+                summaryErrors.push({
+                  number: person.phone,
+                  message:
+                    `Erro ao enviar ${attachment.type}: ` +
+                    `${(mediaError as any)?.message || "Erro desconhecido"}`,
+                });
+              }
             }
-          }
-          
-          // 3. Enviar áudio (se houver)
-          if (input.audioBase64) {
-            await sendAudioMessage(integration.instanceName, {
+            successes += 1;
+          } catch (error) {
+            summaryErrors.push({
               number: person.phone,
-              audio: input.audioBase64,
-              encoding: true,
+              message: (error as any)?.message || "Erro desconhecido",
             });
           }
-          
-          successes += 1;
-        } catch (error) {
-          summaryErrors.push({
-            number: person.phone,
-            message: (error as any)?.message || "Erro desconhecido",
-          });
-        }
         if (delayMs > 0 && idx < recipients.length - 1) {
           await new Promise((resolve) => setTimeout(resolve, delayMs));
         }

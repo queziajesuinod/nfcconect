@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,6 +7,19 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { trpc, trpcClient } from "@/lib/trpc";
+
+type MediaType = "image" | "audio" | "document";
+
+type AttachmentInput = {
+  type: MediaType;
+  base64: string;
+  mimeType: string;
+  fileName: string;
+  previewUrl?: string;
+  caption?: string;
+  encoding?: boolean;
+  mediaType?: "image" | "video" | "document";
+};
 
 type TargetType = "group" | "users" | "schedule" | "firstTime";
 
@@ -71,6 +84,17 @@ export default function Disparos() {
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
   const [isDeletingTemplate, setIsDeletingTemplate] = useState(false);
   const [isSavingDelay, setIsSavingDelay] = useState(false);
+  const [imageAttachment, setImageAttachment] = useState<AttachmentInput | null>(null);
+  const [audioAttachment, setAudioAttachment] = useState<AttachmentInput | null>(null);
+  const [documentAttachment, setDocumentAttachment] = useState<AttachmentInput | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordedBlobUrl, setRecordedBlobUrl] = useState<string | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const [inputLevel, setInputLevel] = useState(0);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const animationIdRef = useRef<number | null>(null);
   const templatesQuery = trpc.broadcast.templates.list.useQuery();
   const groupsQuery = trpc.groups.list.useQuery({ page: 1, pageSize: 50 });
   const schedulesQuery = trpc.schedules.list.useQuery({ page: 1, pageSize: 50 });
@@ -183,6 +207,157 @@ export default function Disparos() {
     setUserSearchTerm("");
   };
 
+  const readFileAsBase64 = (file: File) =>
+    new Promise<{ base64: string; mimeType: string }>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        const [, base64] = dataUrl.split(",");
+        const mimeMatch = dataUrl.match(/data:([^;]+);base64,/);
+        const mimeType = mimeMatch?.[1] || file.type || "application/octet-stream";
+        if (!base64) {
+          reject(new Error("Falha ao ler o arquivo"));
+          return;
+        }
+        resolve({ base64, mimeType });
+      };
+      reader.onerror = () => reject(new Error("Falha ao ler o arquivo"));
+      reader.readAsDataURL(file);
+    });
+
+  const handleAttachmentChange =
+    (type: MediaType) => async (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) {
+        if (type === "image") setImageAttachment(null);
+        else if (type === "audio") {
+          setAudioAttachment(null);
+          setRecordedBlobUrl(null);
+        } else {
+          setDocumentAttachment(null);
+        }
+        return;
+      }
+
+      try {
+        const { base64, mimeType } = await readFileAsBase64(file);
+        const attachment: AttachmentInput = {
+          type,
+          base64,
+          mimeType,
+          fileName: file.name,
+          previewUrl: type === "image" ? `data:${mimeType};base64,${base64}` : undefined,
+          encoding: type === "audio" ? true : undefined,
+          mediaType: type === "document" ? "document" : type === "image" ? "image" : undefined,
+        };
+        if (type === "image") {
+          setImageAttachment(attachment);
+        } else if (type === "audio") {
+          setAudioAttachment(attachment);
+          setRecordedBlobUrl(null);
+        } else {
+          setDocumentAttachment(attachment);
+        }
+      } catch (err) {
+        toast.error("Falha ao processar o arquivo");
+      } finally {
+        event.target.value = "";
+      }
+    };
+
+  const removeAttachment = (type: MediaType) => {
+    if (type === "image") {
+      setImageAttachment(null);
+    } else if (type === "audio") {
+      setAudioAttachment(null);
+      setRecordedBlobUrl(null);
+    } else {
+      setDocumentAttachment(null);
+    }
+  };
+
+  const stopRecording = () => {
+    if (!mediaRecorderRef.current) return;
+    mediaRecorderRef.current.stop();
+    if (animationIdRef.current) {
+      cancelAnimationFrame(animationIdRef.current);
+      animationIdRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
+    }
+    analyserRef.current = null;
+    setIsRecording(false);
+    setInputLevel(0);
+  };
+
+  const startRecording = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      toast.error("Microfone não suportado");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordedChunksRef.current = [];
+      const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      mediaRecorderRef.current = recorder;
+      const audioContext = new AudioContext();
+      audioContextRef.current = audioContext;
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      const source = audioContext.createMediaStreamSource(stream);
+      source.connect(analyser);
+      analyserRef.current = analyser;
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      const updateLevel = () => {
+        if (!analyserRef.current) return;
+        analyserRef.current.getByteFrequencyData(dataArray);
+        const sum = dataArray.reduce((acc, value) => acc + value, 0);
+        const average = sum / dataArray.length;
+        setInputLevel(Math.min(100, Math.round((average / 255) * 100)));
+        animationIdRef.current = requestAnimationFrame(updateLevel);
+      };
+      animationIdRef.current = requestAnimationFrame(updateLevel);
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordedChunksRef.current.push(event.data);
+        }
+      };
+      recorder.onstop = async () => {
+        const blob = new Blob(recordedChunksRef.current, { type: "audio/webm" });
+        setRecordedBlobUrl(URL.createObjectURL(blob));
+        try {
+          const tempFile = new File(recordedChunksRef.current, "gravacao.webm", { type: blob.type });
+          const { base64, mimeType } = await readFileAsBase64(tempFile);
+          setAudioAttachment({
+            type: "audio",
+            base64,
+            mimeType,
+            fileName: tempFile.name,
+            encoding: true,
+          });
+        } catch {
+          toast.error("Falha ao salvar a gravação");
+        }
+        stream.getTracks().forEach((track) => track.stop());
+        setIsRecording(false);
+      };
+      recorder.start();
+      setIsRecording(true);
+    } catch {
+      toast.error("Permissão de microfone negada");
+    }
+  };
+
+  const toggleRecording = () => {
+    if (isRecording) {
+      stopRecording();
+      return;
+    }
+    startRecording();
+  };
+
   useEffect(() => {
     if (delaySettingsQuery.data && delayInput === "") {
       setDelayInput(String(delaySettingsQuery.data.delayMs));
@@ -214,12 +389,48 @@ export default function Disparos() {
         ? Math.min(120000, Math.max(0, Math.floor(parsedDelay)))
         : fallbackDelay;
 
+    const attachmentsPayload = [
+      imageAttachment
+        ? {
+            type: imageAttachment.type,
+            base64: imageAttachment.base64,
+            mimeType: imageAttachment.mimeType,
+            fileName: imageAttachment.fileName,
+            mediaType: imageAttachment.mediaType ?? "image",
+          }
+        : null,
+      documentAttachment
+        ? {
+            type: documentAttachment.type,
+            base64: documentAttachment.base64,
+            mimeType: documentAttachment.mimeType,
+            fileName: documentAttachment.fileName,
+            mediaType: "document",
+          }
+        : null,
+      audioAttachment
+        ? {
+            type: audioAttachment.type,
+            base64: audioAttachment.base64,
+            mimeType: audioAttachment.mimeType,
+            fileName: audioAttachment.fileName,
+          }
+        : null,
+    ].filter(Boolean) as Array<{
+      type: MediaType;
+      base64: string;
+      mimeType: string;
+      fileName: string;
+      mediaType?: "image" | "video" | "document";
+    }>;
+
     const payload = {
       templateId: selectedTemplateId ?? undefined,
       content: messageContent.trim() || undefined,
       link: linkValue.trim() || undefined,
       target: targetPayload,
       delayMs: normalizedDelay,
+      ...(attachmentsPayload.length ? { attachments: attachmentsPayload } : {}),
     };
 
     setSummary(null);
@@ -542,6 +753,103 @@ export default function Disparos() {
                 placeholder="https://..."
                 className="border-2 border-black rounded-none"
               />
+            </div>
+
+            <div className="space-y-3">
+              <Label className="text-xs uppercase">Mídias (opcional)</Label>
+              <div className="grid md:grid-cols-3 gap-4">
+                <div className="border border-black rounded-none p-3">
+                  <p className="text-xs uppercase">Imagem</p>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleAttachmentChange("image")}
+                    className="w-full text-xs"
+                  />
+                  {imageAttachment && (
+                    <div className="mt-2 space-y-1">
+                      <p className="text-xs text-gray-700">{imageAttachment.fileName}</p>
+                      <img
+                        src={imageAttachment.previewUrl}
+                        alt="Preview"
+                        className="w-full h-28 object-contain border border-gray-200"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeAttachment("image")}
+                        className="text-xs text-red-600 underline"
+                      >
+                        Remover imagem
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div className="border border-black rounded-none p-3">
+                  <p className="text-xs uppercase">Áudio</p>
+                  <input
+                    type="file"
+                    accept="audio/*"
+                    onChange={handleAttachmentChange("audio")}
+                    className="w-full text-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={toggleRecording}
+                    className="mt-2 w-full text-xs border border-black rounded-none px-2 py-1 font-bold uppercase"
+                  >
+                    {isRecording ? "Parar gravação" : "Gravar áudio"}
+                  </button>
+                  {recordedBlobUrl && (
+                    <audio controls src={recordedBlobUrl} className="w-full mt-2" />
+                  )}
+                  {(isRecording || inputLevel > 0) && (
+                    <div className="mt-2">
+                      <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div
+                          className="h-2 bg-lime-500 transition-all duration-150"
+                          style={{ width: `${inputLevel}%` }}
+                        />
+                      </div>
+                      <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-[0.3em]">
+                        Captando áudio ({inputLevel}%)
+                      </p>
+                    </div>
+                  )}
+                  {audioAttachment && (
+                    <div className="mt-2 space-y-1">
+                      <p className="text-xs text-gray-700">{audioAttachment.fileName}</p>
+                      <button
+                        type="button"
+                        onClick={() => removeAttachment("audio")}
+                        className="text-xs text-red-600 underline"
+                      >
+                        Remover áudio
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div className="border border-black rounded-none p-3">
+                  <p className="text-xs uppercase">Documento</p>
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
+                    onChange={handleAttachmentChange("document")}
+                    className="w-full text-xs"
+                  />
+                  {documentAttachment && (
+                    <div className="mt-2 space-y-1">
+                      <p className="text-xs text-gray-700">{documentAttachment.fileName}</p>
+                      <button
+                        type="button"
+                        onClick={() => removeAttachment("document")}
+                        className="text-xs text-red-600 underline"
+                      >
+                        Remover documento
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
             <Button

@@ -18,6 +18,22 @@ type EvoMessagePayload = {
   [key: string]: unknown;
 };
 
+export type EvoImagePayload = {
+  number: string;
+  base64: string;
+  fileName?: string;
+  mimeType?: string;
+  caption?: string;
+  mediaType: "image" | "video" | "document";
+  encoding?: boolean;
+};
+
+export type EvoAudioPayload = {
+  number: string;
+  audio: string;
+  encoding?: boolean;
+};
+
 const BASE_RAW = ENV.evoApiUrl || "";
 const API_KEY = ENV.evoApiKey || "";
 
@@ -376,49 +392,55 @@ export async function sendTextMessage(
 
 export async function sendMediaMessage(
   instanceName: string,
-  payload: {
-    number: string;
-    mediatype: "image" | "video" | "document";
-    mimetype: string;
-    caption?: string;
-    media: string; // base64 or URL
-  },
+  payload: EvoImagePayload,
   options: EvoRequestOptions = {}
 ): Promise<unknown> {
-  const key = options.apiKeyOverride || API_KEY;
-  console.log("[EVO] sendMediaMessage", {
-    instanceName,
+  const suffix =
+    payload.mediaType === "video"
+      ? "mp4"
+      : payload.mediaType === "document"
+      ? "pdf"
+      : "jpg";
+  const data: Record<string, unknown> = {
     number: payload.number,
-    mediatype: payload.mediatype,
-    hasApiKey: !!key,
-  });
+    mediatype: payload.mediaType,
+    mediaType: payload.mediaType,
+    mimetype:
+      payload.mimeType ||
+      (payload.mediaType === "video"
+        ? "video/mp4"
+        : payload.mediaType === "document"
+        ? "application/pdf"
+        : "image/jpeg"),
+    fileName: payload.fileName || `arquivo.${suffix}`,
+    caption: payload.caption ?? ".",
+    media: payload.base64,
+    encoding: payload.encoding ?? true,
+  };
+
   return evoRequest({
     method: "post",
     path: `/message/sendMedia/${encodeURIComponent(instanceName)}`,
-    data: payload,
+    data,
     ...options,
   });
 }
 
-export async function sendAudioMessage(
+export async function sendWhatsAppAudio(
   instanceName: string,
-  payload: {
-    number: string;
-    audio: string; // base64 or URL
-    encoding?: boolean;
-  },
+  payload: EvoAudioPayload,
   options: EvoRequestOptions = {}
 ): Promise<unknown> {
-  const key = options.apiKeyOverride || API_KEY;
-  console.log("[EVO] sendAudioMessage", {
-    instanceName,
+  const data: Record<string, unknown> = {
     number: payload.number,
-    hasApiKey: !!key,
-  });
+    audio: payload.audio,
+    encoding: payload.encoding ?? true,
+  };
+
   return evoRequest({
     method: "post",
     path: `/message/sendWhatsAppAudio/${encodeURIComponent(instanceName)}`,
-    data: payload,
+    data,
     ...options,
   });
 }

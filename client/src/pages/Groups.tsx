@@ -11,6 +11,7 @@ import { Trash2, Edit2, Plus, Users, Calendar, Eye } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 import { useLocation } from 'wouter';
+import RedirectPlaceholders from '@/components/RedirectPlaceholders';
 
 export function Groups() {
   const [, navigate] = useLocation();
@@ -158,6 +159,7 @@ export function Groups() {
                     onChange={(e) => setFormData({ ...formData, redirectUrl: e.target.value })}
                     placeholder="https://exemplo.com/jovens"
                   />
+                  <RedirectPlaceholders />
                 </div>
                 <div>
                   <Label htmlFor="color">Cor</Label>

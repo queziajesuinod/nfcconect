@@ -32,6 +32,7 @@ import { Plus, Pencil, Trash2, Link2, ExternalLink, Copy, MousePointer } from "l
 import { useState } from "react";
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
+import RedirectPlaceholders from "@/components/RedirectPlaceholders";
 
 interface LinkFormData {
   nfcUserId: number | null;
@@ -413,6 +414,7 @@ export default function Links() {
                     placeholder="https://exemplo.com/acao"
                     className="border-2 border-black rounded-none mt-1"
                   />
+                  <RedirectPlaceholders />
                 </div>
                 <div>
                   <Label className="font-bold uppercase text-sm">Título</Label>
