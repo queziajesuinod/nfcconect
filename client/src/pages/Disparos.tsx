@@ -50,6 +50,8 @@ const targetOptions: Array<{ label: string; value: TargetType }> = [
 
 const placeholders = [
   "{{name}}",
+  "{{email}}",
+  "{{phone}}",
   "{{date}}",
   "{{scheduledDate}}",
   "{{link}}",
@@ -58,6 +60,30 @@ const placeholders = [
 ];
 
 export default function Disparos() {
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const templateTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const [emojiPickerVisibleMessage, setEmojiPickerVisibleMessage] = useState(false);
+  const [emojiPickerVisibleTemplate, setEmojiPickerVisibleTemplate] = useState(false);
+  const EMOJIS = [
+    "😀",
+    "😂",
+    "🔥",
+    "❤️",
+    "🎉",
+    "🚀",
+    "✨",
+    "⭐",
+    "🙏",
+    "👌",
+    "✔️",
+    "❌",
+    "📌",
+    "🙌",
+    "⚠️",
+    "✅",
+    "📖",
+    "🔗",
+  ];
   const [templateName, setTemplateName] = useState("");
   const [templateContent, setTemplateContent] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
@@ -95,6 +121,64 @@ export default function Disparos() {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const animationIdRef = useRef<number | null>(null);
+  const editorRefs = {
+    message: textareaRef,
+    template: templateTextareaRef,
+  } as const;
+  type EditorKey = keyof typeof editorRefs;
+  const editorValues = {
+    message: messageContent,
+    template: templateContent,
+  };
+  const editorSetters = {
+    message: setMessageContent,
+    template: setTemplateContent,
+  };
+
+  const insertAtCursor = (target: EditorKey, insertValue: string, surround = false) => {
+    const textarea = editorRefs[target].current;
+    if (!textarea) {
+      return;
+    }
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const before = editorValues[target].slice(0, start);
+    const after = editorValues[target].slice(end);
+    const selected = editorValues[target].slice(start, end);
+    const replacement = surround
+      ? `*${selected || insertValue}*`
+      : insertValue;
+    const nextValue = `${before}${replacement}${after}`;
+    const cursorPosition = before.length + replacement.length;
+    editorSetters[target](nextValue);
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(cursorPosition, cursorPosition);
+    });
+  };
+
+  const handleBold = (target: EditorKey) => {
+    insertAtCursor(target, "", true);
+  };
+
+  const handleInsertEmoji = (target: EditorKey, emoji: string) => {
+    insertAtCursor(target, emoji, false);
+    if (target === "message") {
+      setEmojiPickerVisibleMessage(false);
+    } else {
+      setEmojiPickerVisibleTemplate(false);
+    }
+  };
+
+  const toggleEmojiPicker = (target: EditorKey) => {
+    if (target === "message") {
+      setEmojiPickerVisibleMessage((prev) => !prev);
+      setEmojiPickerVisibleTemplate(false);
+    } else {
+      setEmojiPickerVisibleTemplate((prev) => !prev);
+      setEmojiPickerVisibleMessage(false);
+    }
+  };
   const templatesQuery = trpc.broadcast.templates.list.useQuery();
   const groupsQuery = trpc.groups.list.useQuery({ page: 1, pageSize: 50 });
   const schedulesQuery = trpc.schedules.list.useQuery({ page: 1, pageSize: 50 });
@@ -506,42 +590,83 @@ export default function Disparos() {
             <CardTitle className="font-black">Modelos de mensagem</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className="text-xs uppercase">Nome do modelo</Label>
-                <Input
-                  value={templateName}
-                  onChange={(event) => setTemplateName(event.target.value)}
-                  placeholder="Ex: Lembrete de check-in"
-                  className="border-2 border-black rounded-none"
-                />
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-xs uppercase">Nome do modelo</Label>
+                  <Input
+                    value={templateName}
+                    onChange={(event) => setTemplateName(event.target.value)}
+                    placeholder="Ex: Lembrete de check-in"
+                    className="border-2 border-black rounded-none"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <Label className="text-xs uppercase">Conteúdo do modelo</Label>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="border border-black px-3 py-1 text-[10px] font-black uppercase rounded-none"
+                        onClick={() => handleBold("template")}
+                      >
+                        * Negrito *
+                      </button>
+                      <div className="relative">
+                        <button
+                          type="button"
+                          className="border border-black px-3 py-1 text-[10px] font-black uppercase rounded-none"
+                          onClick={() => toggleEmojiPicker("template")}
+                        >
+                          😊 Emojis
+                        </button>
+                        {emojiPickerVisibleTemplate && (
+                          <div className="absolute right-0 mt-2 w-32 rounded border border-gray-300 bg-white p-2 shadow-lg z-10">
+                            <div className="flex flex-wrap gap-1">
+                              {EMOJIS.map((emoji) => (
+                                <button
+                                  key={emoji}
+                                  type="button"
+                                  className="text-base"
+                                  onClick={() => handleInsertEmoji("template", emoji)}
+                                >
+                                  {emoji}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <Textarea
+                    ref={templateTextareaRef}
+                    value={templateContent}
+                    onChange={(event) => setTemplateContent(event.target.value)}
+                    rows={3}
+                    className="border-2 border-black rounded-none"
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label className="text-xs uppercase">Conteúdo do modelo</Label>
-                <Textarea
-                  value={templateContent}
-                  onChange={(event) => setTemplateContent(event.target.value)}
-                  rows={3}
-                  className="border-2 border-black rounded-none"
-                />
-              </div>
+            <div className="flex gap-2 flex-wrap">
+              <Button
+                variant="secondary"
+                onClick={handleSaveTemplate}
+                disabled={isSavingTemplate || !templateName.trim() || !templateContent.trim()}
+                className="border-2 border-black rounded-none flex-1 font-bold uppercase"
+              >
+                {isSavingTemplate ? "Salvando..." : "Salvar modelo"}
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleDeleteTemplate}
+                disabled={!selectedTemplateId || isDeletingTemplate}
+                className="border-2 border-black rounded-none flex-1 font-bold uppercase"
+              >
+                {isDeletingTemplate ? "Excluindo..." : "Excluir modelo"}
+              </Button>
             </div>
-            <Button
-              variant="secondary"
-              onClick={handleSaveTemplate}
-              disabled={isSavingTemplate || !templateName.trim() || !templateContent.trim()}
-              className="border-2 border-black rounded-none w-full font-bold uppercase"
-            >
-              {isSavingTemplate ? "Salvando..." : "Salvar modelo"}
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDeleteTemplate}
-              disabled={!selectedTemplateId || isDeletingTemplate}
-              className="border-2 border-black rounded-none w-full font-bold uppercase"
-            >
-              {isDeletingTemplate ? "Excluindo..." : "Excluir modelo"}
-            </Button>
             <div>
               <p className="text-xs uppercase text-gray-500">Modelos disponíveis</p>
               <div className="flex flex-wrap gap-2 mt-2">
@@ -589,23 +714,68 @@ export default function Disparos() {
                 ))}
               </select>
             </div>
-            <div className="space-y-2">
-              <Label className="text-xs uppercase">Conteúdo</Label>
-              <Textarea
-                value={messageContent}
-                onChange={(event) => setMessageContent(event.target.value)}
-                rows={6}
-                className="border-2 border-black rounded-none"
-              />
-              <p className="text-xs text-gray-500">
-                Use <code className="font-mono">{"\\n"}</code> para quebra de linha no Evo e inclua{" "}
-                <code className="font-mono">{'{{name}}'}</code>,{" "}
-                <code className="font-mono">{'{{date}}'}</code>,{" "}
-                <code className="font-mono">{'{{scheduledDate}}'}</code>,{" "}
-                <code className="font-mono">{'{{link}}'}</code> e{" "}
-                <code className="font-mono">{'{{deviceId}}'}</code> para personalização.
-              </p>
-            </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <Label className="text-xs uppercase">Conteúdo</Label>
+                    <p className="text-[10px] uppercase tracking-[0.3em] text-gray-500">
+                      Utilize <strong>*texto*</strong> para negrito no Evo e insira emojis
+                      para ilustrar o texto.
+                    </p>
+                  </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="border border-black px-3 py-1 text-[10px] font-black uppercase rounded-none"
+                        onClick={() => handleBold("message")}
+                      >
+                        * Negrito *
+                      </button>
+                      <div className="relative">
+                        <button
+                          type="button"
+                          className="border border-black px-3 py-1 text-[10px] font-black uppercase rounded-none"
+                          onClick={() => toggleEmojiPicker("message")}
+                        >
+                          😊 Emojis
+                        </button>
+                        {emojiPickerVisibleMessage && (
+                          <div className="absolute right-0 mt-2 w-32 rounded border border-gray-300 bg-white p-2 shadow-lg z-10">
+                            <div className="flex flex-wrap gap-1">
+                              {EMOJIS.map((emoji) => (
+                                <button
+                                  key={emoji}
+                                  type="button"
+                                  className="text-base"
+                                  onClick={() => handleInsertEmoji("message", emoji)}
+                                >
+                                  {emoji}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                </div>
+                <Textarea
+                  ref={textareaRef}
+                  value={messageContent}
+                  onChange={(event) => setMessageContent(event.target.value)}
+                  rows={6}
+                  className="border-2 border-black rounded-none"
+                />
+                <p className="text-xs text-gray-500">
+                  Use <code className="font-mono">{"\\n"}</code> para quebra de linha no Evo e inclua{" "}
+                  <code className="font-mono">{'{{name}}'}</code>,{" "}
+                  <code className="font-mono">{'{{email}}'}</code>,{" "}
+                  <code className="font-mono">{'{{phone}}'}</code>,{" "}
+                  <code className="font-mono">{'{{date}}'}</code>,{" "}
+                  <code className="font-mono">{'{{scheduledDate}}'}</code>,{" "}
+                  <code className="font-mono">{'{{link}}'}</code> e{" "}
+                  <code className="font-mono">{'{{deviceId}}'}</code> para personalização.
+                </p>
+              </div>
 
             <div className="space-y-2">
               <Label className="text-xs uppercase">Tipo de envio</Label>

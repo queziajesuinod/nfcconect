@@ -29,8 +29,10 @@ type BroadcastTargetInput = {
 };
 
 type BroadcastRecipient = {
+  phoneLocal?: string | null;
   phone: string;
   name?: string | null;
+  email?: string | null;
   userId?: number;
   deviceId?: string | null;
 };
@@ -96,6 +98,14 @@ function normalizePhoneNumber(raw?: string | null): string | null {
   return `55${digits}`;
 }
 
+function extractLocalPhone(raw?: string | null): string | null {
+  if (!raw) return null;
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return null;
+  if (digits.startsWith("55")) return digits.slice(2);
+  return digits;
+}
+
 function renderTemplate(template: string, values: Record<string, string>) {
   let text = template.replace(/\\n/g, "\n");
   return text.replace(/\{\{(\w+)\}\}/g, (_, key) => {
@@ -109,15 +119,16 @@ async function resolveRecipients(target: BroadcastTargetInput) {
   let skipped = 0;
   const recipients: BroadcastRecipient[] = [];
 
-  const addRecipient = (candidate: BroadcastRecipient) => {
+    const addRecipient = (candidate: BroadcastRecipient) => {
     const normalized = normalizePhoneNumber(candidate.phone);
+    const local = extractLocalPhone(candidate.phone);
     if (!normalized) {
       skipped += 1;
       return;
     }
     if (seen.has(normalized)) return;
     seen.add(normalized);
-    recipients.push({ ...candidate, phone: normalized });
+    recipients.push({ ...candidate, phone: normalized, phoneLocal: local });
   };
 
     if (target.type === "group") {
@@ -125,12 +136,13 @@ async function resolveRecipients(target: BroadcastTargetInput) {
       const group = await getNotificationGroupById(target.groupId!);
       label = group?.name || `Grupo ${target.groupId}`;
       users.forEach(user => {
-        addRecipient({
-          phone: user.userPhone || "",
-          name: user.userName || user.userEmail || null,
-          userId: user.nfcUserId,
-          deviceId: user.deviceId || null,
-        });
+      addRecipient({
+        phone: user.userPhone || "",
+        name: user.userName || user.userEmail || null,
+        email: user.userEmail || null,
+        userId: user.nfcUserId,
+        deviceId: user.deviceId || null,
+      });
       });
       return { recipients, label, skipped };
     }
@@ -144,6 +156,7 @@ async function resolveRecipients(target: BroadcastTargetInput) {
           addRecipient({
             phone: user.phone || "",
             name: user.name || user.email || null,
+            email: user.email || null,
             userId: user.id,
             deviceId: user.deviceId || null,
           });
@@ -170,12 +183,12 @@ async function resolveRecipients(target: BroadcastTargetInput) {
       : await getAutomaticCheckinsForScheduleDate(schedule.id, parsedDate);
 
   checkins.forEach(checkin => {
-    addRecipient({
-      phone: checkin.userPhone || "",
-      name: checkin.userName || null,
-      userId: checkin.nfcUserId,
-      deviceId: checkin.deviceId || null,
-    });
+          addRecipient({
+            phone: checkin.userPhone || "",
+            name: checkin.userName || null,
+            userId: checkin.nfcUserId,
+            deviceId: checkin.deviceId || null,
+          });
   });
   return { recipients, label, skipped };
 }
@@ -297,6 +310,8 @@ export const broadcastRouter = router({
           scheduledDate: scheduledLabel,
           target: label,
           deviceId: person.deviceId || "",
+          phone: person.phoneLocal ?? person.phone ?? "",
+          email: person.email || "",
         };
         const personalizedLink = linkValue ? renderTemplate(linkValue, templateValues) : "";
         const message = renderTemplate(content, {
