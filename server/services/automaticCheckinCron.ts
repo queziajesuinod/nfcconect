@@ -10,13 +10,12 @@ import {
   autoAddUserToScheduleGroups
 } from '../db';
 import { ENV } from '../_core/env';
+import { getAmazonTime } from '../utils/timezone';
 
-// Helper function to get current date/time in Campo Grande MS timezone (UTC-4)
+// Helper function to get current date/time in Amazon timezone (UTC-4)
+// DEPRECATED: Use getAmazonTime() from utils/timezone instead
 function getCampoGrandeTime(): Date {
-  const now = new Date();
-  const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
-  const campoGrandeOffset = -4 * 60 * 60000; // UTC-4 in milliseconds
-  return new Date(utcTime + campoGrandeOffset);
+  return getAmazonTime();
 }
 
 /**
@@ -233,7 +232,7 @@ export function startAutomaticCheckinCron() {
     await processAllActiveSchedules();
   }, {
     scheduled: true,
-    timezone: 'America/Campo_Grande'
+    timezone: 'America/Manaus' // Amazon Standard Time (UTC-4)
   });
   
   console.log('[Cron] Automatic check-in cron job started successfully');

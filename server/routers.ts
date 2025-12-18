@@ -28,14 +28,12 @@ import {
   autoAddUserToScheduleGroups, getGroupRedirectUrlForUser,
   isScheduleActive, calculateDistance
 } from "./db";
+import { getAmazonTime, nowInAmazonTime } from './utils/timezone';
 
-// Helper function to get current date/time in Campo Grande MS timezone (UTC-4)
+// Helper function to get current date/time in Amazon timezone (UTC-4)
+// DEPRECATED: Use getAmazonTime() from utils/timezone instead
 function getCampoGrandeTime(): Date {
-  // Campo Grande MS is UTC-4 (America/Campo_Grande)
-  const now = new Date();
-  const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
-  const campoGrandeOffset = -4 * 60 * 60000; // UTC-4 in milliseconds
-  return new Date(utcTime + campoGrandeOffset);
+  return getAmazonTime();
 }
 
 // Use protectedProcedure for all admin endpoints
@@ -164,7 +162,7 @@ export const appRouter = router({
           const relation = await getUserTagRelation(existingUser.id, tag.id);
           if (relation) {
             // Update last connection and log
-            await updateNfcUser(existingUser.id, { lastConnectionAt: new Date() });
+            await updateNfcUser(existingUser.id, { lastConnectionAt: nowInAmazonTime() });
             await updateUserTagRelation(existingUser.id, tag.id);
             await createConnectionLog({
               tagId: tag.id,
@@ -193,7 +191,7 @@ export const appRouter = router({
           } else {
             // User exists but not connected to this tag - create relation automatically
             await createUserTagRelation(existingUser.id, tag.id);
-            await updateNfcUser(existingUser.id, { lastConnectionAt: new Date() });
+            await updateNfcUser(existingUser.id, { lastConnectionAt: nowInAmazonTime() });
             await createConnectionLog({
               tagId: tag.id,
               nfcUserId: existingUser.id,
@@ -264,7 +262,7 @@ export const appRouter = router({
           
           if (existingRelation) {
             // Already connected to this tag, just update last connection
-            await updateNfcUser(existingUser.id, { lastConnectionAt: new Date() });
+            await updateNfcUser(existingUser.id, { lastConnectionAt: nowInAmazonTime() });
             await updateUserTagRelation(existingUser.id, tag.id);
             await createConnectionLog({
               tagId: tag.id,
@@ -295,7 +293,7 @@ export const appRouter = router({
           } else {
             // User exists but not connected to this tag - create new relation
             await createUserTagRelation(existingUser.id, tag.id);
-            await updateNfcUser(existingUser.id, { lastConnectionAt: new Date() });
+            await updateNfcUser(existingUser.id, { lastConnectionAt: nowInAmazonTime() });
             await createConnectionLog({
               tagId: tag.id,
               nfcUserId: existingUser.id,
@@ -448,7 +446,7 @@ export const appRouter = router({
         const link = await getDynamicLinkByShortCode(input.shortCode);
         if (!link) throw new TRPCError({ code: 'NOT_FOUND', message: 'Link não encontrado' });
         if (!link.isActive) throw new TRPCError({ code: 'FORBIDDEN', message: 'Link desativado' });
-        if (link.expiresAt && link.expiresAt < new Date()) {
+        if (link.expiresAt && link.expiresAt < nowInAmazonTime()) {
           throw new TRPCError({ code: 'FORBIDDEN', message: 'Link expirado' });
         }
         await incrementLinkClickCount(link.id);
@@ -522,11 +520,11 @@ export const appRouter = router({
         const link = await getDynamicLinkByShortCode(input.shortCode);
         if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Link não encontrado" });
         if (!link.isActive) throw new TRPCError({ code: "FORBIDDEN", message: "Link desativado" });
-        if (link.expiresAt && link.expiresAt < new Date()) {
+        if (link.expiresAt && link.expiresAt < nowInAmazonTime()) {
           throw new TRPCError({ code: "FORBIDDEN", message: "Link expirado" });
         }
 
-        const expiresAt = new Date(Date.now() + input.expiresInMinutes * 60 * 1000);
+        const expiresAt = new Date(nowInAmazonTime().getTime() + input.expiresInMinutes * 60 * 1000);
 
         const tagList = input.tagIds?.length ? input.tagIds : [null];
         for (const deviceId of input.deviceIds) {
@@ -560,7 +558,7 @@ export const appRouter = router({
         const link = await getDynamicLinkByShortCode(input.shortCode);
         if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Link não encontrado" });
         if (!link.isActive) throw new TRPCError({ code: "FORBIDDEN", message: "Link desativado" });
-        if (link.expiresAt && link.expiresAt < new Date()) {
+        if (link.expiresAt && link.expiresAt < nowInAmazonTime()) {
           throw new TRPCError({ code: "FORBIDDEN", message: "Link expirado" });
         }
 
@@ -575,7 +573,7 @@ export const appRouter = router({
           throw new TRPCError({ code: "BAD_REQUEST", message: "Nenhum usuário encontrado no grupo" });
         }
 
-        const expiresAt = new Date(Date.now() + input.expiresInMinutes * 60 * 1000);
+        const expiresAt = new Date(nowInAmazonTime().getTime() + input.expiresInMinutes * 60 * 1000);
         const tagList = input.tagIds?.length ? input.tagIds : [null];
         
         let activationCount = 0;

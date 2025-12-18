@@ -21,6 +21,14 @@ import {
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { generateLegacySalt, hashLegacyPassword } from "./_core/password";
+import { 
+  getAmazonTime, 
+  toAmazonTime, 
+  getAmazonStartOfDay, 
+  getAmazonEndOfDay,
+  nowInAmazonTime,
+  toAmazonISOString 
+} from './utils/timezone';
 
 type DatabaseClient = ReturnType<typeof drizzle>;
 
@@ -271,7 +279,7 @@ export async function updateUserTagRelation(userId: number, tagId: number) {
   if (!db) throw new Error("Database not available");
   
   await db.update(userTagRelations)
-    .set({ lastConnectionAt: new Date() })
+    .set({ lastConnectionAt: nowInAmazonTime() })
     .where(and(eq(userTagRelations.userId, userId), eq(userTagRelations.tagId, tagId)));
 }
 
@@ -362,7 +370,7 @@ export async function validateNfcUser(id: number) {
   
   await db.update(nfcUsers).set({ 
     isValidated: true,
-    lastConnectionAt: new Date()
+    lastConnectionAt: nowInAmazonTime()
   }).where(eq(nfcUsers.id, id));
 }
 
@@ -535,7 +543,7 @@ export async function getActiveDeviceLink(deviceId: string, tagId?: number | nul
   const db = await getDb();
   if (!db) return null;
 
-  const now = new Date();
+  const now = nowInAmazonTime();
   
   // SIMPLIFIED PRIORITY HIERARCHY:
   // 1. Link with specific tag (if tagId provided)
@@ -671,9 +679,7 @@ export async function getCheckinStats() {
     .where(eq(checkins.isWithinRadius, false));
 
   // Get today's checkins
-  const now = new Date();
-  const today = new Date(now);
-  today.setHours(0, 0, 0, 0);
+  const today = getAmazonStartOfDay();
   const [todayCount] = await db.select({ count: sql<number>`count(*)` }).from(checkins)
     .where(gte(checkins.createdAt, today));
 
@@ -1520,19 +1526,11 @@ export async function getConnectionLogHistoryByUser(params: ConnectionLogHistory
 
   const limit = Math.max(1, Math.min(params.limit ?? 50, 200));
   const startDate = params.startDate
-    ? new Date(params.startDate)
-    : (() => {
-        const start = new Date();
-        start.setHours(0, 0, 0, 0);
-        return start;
-      })();
+    ? toAmazonTime(new Date(params.startDate))
+    : getAmazonStartOfDay();
   const endDate = params.endDate
-    ? new Date(params.endDate)
-    : (() => {
-        const end = new Date();
-        end.setHours(23, 59, 59, 999);
-        return end;
-      })();
+    ? toAmazonTime(new Date(params.endDate))
+    : getAmazonEndOfDay();
 
   const result = await db
     .select({
@@ -1596,19 +1594,11 @@ export async function getCheckinHistoryByUser(params: CheckinHistoryParams) {
 
   const limit = Math.max(1, Math.min(params.limit ?? 50, 200));
   const startDate = params.startDate
-    ? new Date(params.startDate)
-    : (() => {
-        const start = new Date();
-        start.setHours(0, 0, 0, 0);
-        return start;
-      })();
+    ? toAmazonTime(new Date(params.startDate))
+    : getAmazonStartOfDay();
   const endDate = params.endDate
-    ? new Date(params.endDate)
-    : (() => {
-        const end = new Date();
-        end.setHours(23, 59, 59, 999);
-        return end;
-      })();
+    ? toAmazonTime(new Date(params.endDate))
+    : getAmazonEndOfDay();
 
   const manualRows = await db.select({
     id: checkins.id,
@@ -1796,9 +1786,7 @@ export async function getUnifiedCheckinStats() {
   const db = await getDb();
   if (!db) return { totalCheckins: 0, checkinsWithinRadius: 0, checkinsOutsideRadius: 0, checkinsToday: 0 };
   
-  const now = new Date();
-  const today = new Date(now);
-  today.setHours(0, 0, 0, 0);
+  const today = getAmazonStartOfDay();
   
   // Auto check-ins stats
   const autoStats = await db.$client`
@@ -1833,20 +1821,13 @@ export async function getTodayCheckinsForActiveSchedules() {
   const db = await getDb();
   if (!db) return { schedules: [], checkins: [] };
   
-  // Get today's date range (Campo Grande MS timezone - UTC-4)
-  const now = new Date();
-  const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
-  const campoGrandeOffset = -4 * 60 * 60000;
-  const campoGrandeNow = new Date(utcTime + campoGrandeOffset);
+  // Get today's date range (Amazon timezone - UTC-4)
+  const amazonNow = getAmazonTime();
+  const startOfDay = getAmazonStartOfDay();
+  const endOfDay = getAmazonEndOfDay();
   
-  const startOfDay = new Date(campoGrandeNow);
-  startOfDay.setHours(0, 0, 0, 0);
-  
-  const endOfDay = new Date(campoGrandeNow);
-  endOfDay.setHours(23, 59, 59, 999);
-  
-  const currentDay = campoGrandeNow.getDay();
-  const currentMinutes = campoGrandeNow.getHours() * 60 + campoGrandeNow.getMinutes();
+  const currentDay = amazonNow.getDay();
+  const currentMinutes = amazonNow.getHours() * 60 + amazonNow.getMinutes();
   
   // Get all active schedules for today
   const allSchedules = await db.select()

@@ -7,6 +7,9 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { startAutomaticCheckinCron } from "../services/automaticCheckinCron";
 
+// Configure server timezone to Amazon Standard Time (UTC-4)
+process.env.TZ = 'America/Manaus';
+
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
     const server = net.createServer();
