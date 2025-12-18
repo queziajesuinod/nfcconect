@@ -506,8 +506,11 @@ export async function setActiveDeviceLink(entry: {
     targetUrl: entry.targetUrl,
     expiresAt: entry.expiresAt,
   };
+  
+  console.log(`[setActiveDeviceLink] Saving link:`, values);
 
   if (entry.tagId == null) {
+    console.log(`[setActiveDeviceLink] Saving as GLOBAL link (tagId = null)`);
     await db.insert(deviceLinkActivations)
       .values(values)
       .onConflictDoUpdate({
@@ -521,8 +524,11 @@ export async function setActiveDeviceLink(entry: {
           createdAt: sql`now()`,
         },
       });
+    console.log(`[setActiveDeviceLink] Global link saved successfully`);
     return;
   }
+  
+  console.log(`[setActiveDeviceLink] Saving as SPECIFIC link (tagId = ${entry.tagId})`);
 
   await db.insert(deviceLinkActivations)
     .values(values)
@@ -537,6 +543,7 @@ export async function setActiveDeviceLink(entry: {
         createdAt: sql`now()`,
       },
     });
+  console.log(`[setActiveDeviceLink] Specific link saved successfully`);
 }
 
 export async function getActiveDeviceLink(deviceId: string, tagId?: number | null) {
@@ -1959,7 +1966,7 @@ export async function getTodayCheckinsForActiveSchedules() {
   return {
     schedules: schedulesWithCounts,
     allCheckins,
-    currentTime: `${String(campoGrandeNow.getHours()).padStart(2, '0')}:${String(campoGrandeNow.getMinutes()).padStart(2, '0')}`,
+    currentTime: `${String(amazonNow.getHours()).padStart(2, '0')}:${String(amazonNow.getMinutes()).padStart(2, '0')}`,
     currentDay,
   };
 }
