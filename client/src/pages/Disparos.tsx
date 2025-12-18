@@ -89,7 +89,7 @@ export default function Disparos() {
     if (!templateName.trim() || !templateContent.trim()) return;
     setIsSavingTemplate(true);
     try {
-      await trpcContext.client.mutation("broadcast.templates.create", {
+      await trpcContext.client.broadcast.templates.create.mutate({
         id: selectedTemplateId ?? undefined,
         name: templateName,
         content: templateContent,
@@ -112,7 +112,7 @@ export default function Disparos() {
     if (!window.confirm("Tem certeza que deseja excluir este modelo?")) return;
     setIsDeletingTemplate(true);
     try {
-      await trpcContext.client.mutation("broadcast.templates.delete", { id: selectedTemplateId });
+      await trpcContext.client.broadcast.templates.delete.mutate({ id: selectedTemplateId });
       setTemplateName("");
       setTemplateContent("");
       setSelectedTemplateId(null);
@@ -131,7 +131,7 @@ export default function Disparos() {
     setIsSavingDelay(true);
     try {
       const delayMs = Math.min(120000, Math.max(0, Math.floor(Number(delayInput))));
-      await trpcContext.client.mutation("broadcast.settings.update", { delayMs });
+      await trpcContext.client.broadcast.settings.update.mutate({ delayMs });
       setDelayInput(String(delayMs));
       delaySettingsQuery.refetch();
       toast.success("Delay atualizado");
@@ -243,7 +243,7 @@ export default function Disparos() {
       });
 
       setIsSending(true);
-      const result = (await trpcContext.client.mutation("broadcast.send", payload)) as SendSummary;
+      const result = (await trpcContext.client.broadcast.send.mutate(payload)) as SendSummary;
       setSummary(result);
       setInFlightProgress({
         attempted: result.attempted,
