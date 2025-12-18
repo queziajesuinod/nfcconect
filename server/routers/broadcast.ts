@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { router, adminProcedure } from "../_core/trpc";
-import { sendTextMessage } from "../services/evolution";
+import { sendTextMessage, sendMediaMessage, sendAudioMessage } from "../services/evolution";
 import {
   createMessageTemplate,
   updateMessageTemplate,
@@ -220,6 +220,9 @@ export const broadcastRouter = router({
           target: targetSchema,
           link: z.string().url().optional(),
           delayMs: z.number().min(0).max(120000).optional(),
+          imageBase64: z.string().optional(),
+          imageCaption: z.string().optional(),
+          audioBase64: z.string().optional(),
         })
         .superRefine((data, ctx) => {
           if (!data.content && !data.templateId) {
@@ -283,10 +286,47 @@ export const broadcastRouter = router({
           link: personalizedLink,
         });
         try {
-          await sendTextMessage(integration.instanceName, {
-            number: person.phone,
-            text: message,
-          });
+          // Sequência: Texto → delay 10s → Imagem → delay 10s → Áudio
+          const MEDIA_DELAY_MS = 10000; // 10 segundos entre mídias
+          
+          // 1. Enviar texto (se houver)
+          if (message && message.trim()) {
+            await sendTextMessage(integration.instanceName, {
+              number: person.phone,
+              text: message,
+            });
+            
+            // Delay antes da imagem (se houver imagem)
+            if (input.imageBase64) {
+              await new Promise((resolve) => setTimeout(resolve, MEDIA_DELAY_MS));
+            }
+          }
+          
+          // 2. Enviar imagem (se houver)
+          if (input.imageBase64) {
+            await sendMediaMessage(integration.instanceName, {
+              number: person.phone,
+              mediatype: "image",
+              mimetype: "image/jpeg",
+              caption: input.imageCaption || ".",
+              media: input.imageBase64,
+            });
+            
+            // Delay antes do áudio (se houver áudio)
+            if (input.audioBase64) {
+              await new Promise((resolve) => setTimeout(resolve, MEDIA_DELAY_MS));
+            }
+          }
+          
+          // 3. Enviar áudio (se houver)
+          if (input.audioBase64) {
+            await sendAudioMessage(integration.instanceName, {
+              number: person.phone,
+              audio: input.audioBase64,
+              encoding: true,
+            });
+          }
+          
           successes += 1;
         } catch (error) {
           summaryErrors.push({

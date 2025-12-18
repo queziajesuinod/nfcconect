@@ -373,3 +373,52 @@ export async function sendTextMessage(
     ...options,
   });
 }
+
+export async function sendMediaMessage(
+  instanceName: string,
+  payload: {
+    number: string;
+    mediatype: "image" | "video" | "document";
+    mimetype: string;
+    caption?: string;
+    media: string; // base64 or URL
+  },
+  options: EvoRequestOptions = {}
+): Promise<unknown> {
+  const key = options.apiKeyOverride || API_KEY;
+  console.log("[EVO] sendMediaMessage", {
+    instanceName,
+    number: payload.number,
+    mediatype: payload.mediatype,
+    hasApiKey: !!key,
+  });
+  return evoRequest({
+    method: "post",
+    path: `/message/sendMedia/${encodeURIComponent(instanceName)}`,
+    data: payload,
+    ...options,
+  });
+}
+
+export async function sendAudioMessage(
+  instanceName: string,
+  payload: {
+    number: string;
+    audio: string; // base64 or URL
+    encoding?: boolean;
+  },
+  options: EvoRequestOptions = {}
+): Promise<unknown> {
+  const key = options.apiKeyOverride || API_KEY;
+  console.log("[EVO] sendAudioMessage", {
+    instanceName,
+    number: payload.number,
+    hasApiKey: !!key,
+  });
+  return evoRequest({
+    method: "post",
+    path: `/message/sendWhatsAppAudio/${encodeURIComponent(instanceName)}`,
+    data: payload,
+    ...options,
+  });
+}
