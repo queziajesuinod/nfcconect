@@ -1,4 +1,4 @@
-import { eq, desc, sql, and, gte, lte, or, inArray, ilike } from "drizzle-orm";
+import { eq, desc, sql, and, gte, lte, or, inArray, ilike, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { 
@@ -545,6 +545,8 @@ export async function getActiveDeviceLink(deviceId: string, tagId?: number | nul
 
   const now = nowInAmazonTime();
   
+  console.log(`[getActiveDeviceLink] Searching for deviceId: ${deviceId}, tagId: ${tagId}`);
+  
   // SIMPLIFIED PRIORITY HIERARCHY:
   // 1. Link with specific tag (if tagId provided)
   // 2. Link with global tag (no tag specified)
@@ -565,8 +567,10 @@ export async function getActiveDeviceLink(deviceId: string, tagId?: number | nul
       .limit(1);
     
     if (specificTagResult[0]) {
+      console.log(`[getActiveDeviceLink] Found specific tag link:`, specificTagResult[0]);
       return specificTagResult[0];
     }
+    console.log(`[getActiveDeviceLink] No specific tag link found, checking global...`);
   }
   
   // Priority 2: Link with global tag (no tag)
@@ -575,7 +579,7 @@ export async function getActiveDeviceLink(deviceId: string, tagId?: number | nul
     .where(
       and(
         eq(deviceLinkActivations.deviceId, deviceId),
-        sql`${deviceLinkActivations.tagId} is null`,
+        isNull(deviceLinkActivations.tagId),
         gte(deviceLinkActivations.expiresAt, now)
       )
     )
@@ -583,9 +587,11 @@ export async function getActiveDeviceLink(deviceId: string, tagId?: number | nul
     .limit(1);
   
   if (globalResult[0]) {
+    console.log(`[getActiveDeviceLink] Found global link:`, globalResult[0]);
     return globalResult[0];
   }
-
+  
+  console.log(`[getActiveDeviceLink] No active link found (neither specific nor global)`);
   return null;
 }
 
