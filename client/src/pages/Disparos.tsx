@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { trpc } from "@/lib/trpc";
+import { trpc, trpcClient } from "@/lib/trpc";
 
 type TargetType = "group" | "users" | "schedule" | "firstTime";
 
@@ -71,8 +71,6 @@ export default function Disparos() {
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
   const [isDeletingTemplate, setIsDeletingTemplate] = useState(false);
   const [isSavingDelay, setIsSavingDelay] = useState(false);
-  const trpcContext = trpc.useContext();
-
   const templatesQuery = trpc.broadcast.templates.list.useQuery();
   const groupsQuery = trpc.groups.list.useQuery({ page: 1, pageSize: 50 });
   const schedulesQuery = trpc.schedules.list.useQuery({ page: 1, pageSize: 50 });
@@ -89,7 +87,7 @@ export default function Disparos() {
     if (!templateName.trim() || !templateContent.trim()) return;
     setIsSavingTemplate(true);
     try {
-      await trpcContext.client.broadcast.templates.create.mutate({
+      await trpcClient.broadcast.templates.create.mutate({
         id: selectedTemplateId ?? undefined,
         name: templateName,
         content: templateContent,
@@ -112,7 +110,7 @@ export default function Disparos() {
     if (!window.confirm("Tem certeza que deseja excluir este modelo?")) return;
     setIsDeletingTemplate(true);
     try {
-      await trpcContext.client.broadcast.templates.delete.mutate({ id: selectedTemplateId });
+      await trpcClient.broadcast.templates.delete.mutate({ id: selectedTemplateId });
       setTemplateName("");
       setTemplateContent("");
       setSelectedTemplateId(null);
@@ -131,7 +129,7 @@ export default function Disparos() {
     setIsSavingDelay(true);
     try {
       const delayMs = Math.min(120000, Math.max(0, Math.floor(Number(delayInput))));
-      await trpcContext.client.broadcast.settings.update.mutate({ delayMs });
+      await trpcClient.broadcast.settings.update.mutate({ delayMs });
       setDelayInput(String(delayMs));
       delaySettingsQuery.refetch();
       toast.success("Delay atualizado");
@@ -229,7 +227,7 @@ export default function Disparos() {
     setInFlightProgress(null);
 
     try {
-      const previewResult = await trpc.broadcast.preview.fetch({ target: targetPayload });
+      const previewResult = await trpcClient.broadcast.preview.query({ target: targetPayload });
       if (!previewResult.attempted) {
         toast.error("Nenhum destinatário válido foi encontrado para este envio.");
         return;
@@ -243,7 +241,7 @@ export default function Disparos() {
       });
 
       setIsSending(true);
-      const result = (await trpcContext.client.broadcast.send.mutate(payload)) as SendSummary;
+      const result = (await trpcClient.broadcast.send.mutate(payload)) as SendSummary;
       setSummary(result);
       setInFlightProgress({
         attempted: result.attempted,
