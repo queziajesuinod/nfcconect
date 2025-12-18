@@ -22,7 +22,7 @@ import {
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import { useAuth } from "@/hooks/useAuth";
-import { LayoutDashboard, LogOut, PanelLeft, Users, Nfc, Activity, Link2, MapPin, CalendarClock, Radio, Users2, Search } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Users, Nfc, Activity, Link2, MapPin, CalendarClock, Radio, Users2, Search, Zap, Megaphone } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -39,6 +39,8 @@ const menuItems = [
   { icon: Users2, label: "GRUPOS", path: "/dashboard/groups" },
   { icon: Activity, label: "LOGS", path: "/dashboard/logs" },
   { icon: Link2, label: "LINKS", path: "/dashboard/links" },
+  { icon: Megaphone, label: "DISPAROS", path: "/dashboard/disparos" },
+  { icon: Zap, label: "EVOLUTION", path: "/dashboard/evolution" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";

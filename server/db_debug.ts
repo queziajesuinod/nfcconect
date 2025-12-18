@@ -1,4 +1,5 @@
 import { getDb } from './db';
+import { eq } from 'drizzle-orm';
 import { deviceLinkActivations } from '../drizzle/schema';
 
 /**
@@ -49,7 +50,7 @@ export async function debugFindActivationsForDevice(deviceId: string) {
   const activations = await db
     .select()
     .from(deviceLinkActivations)
-    .where(eq => eq(deviceLinkActivations.deviceId, deviceId));
+    .where(eq(deviceLinkActivations.deviceId, deviceId));
   
   console.log('\n' + '='.repeat(80));
   console.log(`[DEBUG] ACTIVATIONS FOR DEVICE: ${deviceId}`);

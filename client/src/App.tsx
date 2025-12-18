@@ -23,6 +23,8 @@ import GroupDetails from "./pages/GroupDetails";
 import { Login } from "./pages/Login";
 import Register from "./pages/Register";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import EvolutionIntegration from "./pages/EvolutionIntegration";
+import Disparos from "./pages/Disparos";
 
 function Router() {
   return (
@@ -89,6 +91,16 @@ function Router() {
       <Route path="/dashboard/groups/:id">
         <ProtectedRoute>
           <GroupDetails />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/dashboard/evolution">
+        <ProtectedRoute>
+          <EvolutionIntegration />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/dashboard/disparos">
+        <ProtectedRoute>
+          <Disparos />
         </ProtectedRoute>
       </Route>
       

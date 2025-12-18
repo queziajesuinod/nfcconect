@@ -18,4 +18,7 @@ export const ENV = {
   // Manus APIs (for notifications, storage, etc - optional)
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
+  // Evolution WhatsApp integration
+  evoApiUrl: process.env.EVO_API_URL ?? "",
+  evoApiKey: process.env.EVO_API_KEY ?? "",
 };

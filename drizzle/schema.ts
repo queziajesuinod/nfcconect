@@ -199,6 +199,22 @@ export const deviceLinkActivations = pgTable("device_link_activations", {
 export type DeviceLinkActivation = typeof deviceLinkActivations.$inferSelect;
 export type InsertDeviceLinkActivation = typeof deviceLinkActivations.$inferInsert;
 
+export const userEvolutionIntegrations = pgTable("user_evolution_integrations", {
+  id: serial("id").primaryKey(),
+  userId: uuid("user_id").notNull(),
+  instanceName: text("instance_name").notNull(),
+  connectionStatus: text("connection_status"),
+  pairingCode: text("pairing_code"),
+  rawResponse: text("raw_response"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  userUnique: uniqueIndex("user_evolution_integrations_user_id_idx").on(table.userId),
+}));
+
+export type UserEvolutionIntegration = typeof userEvolutionIntegrations.$inferSelect;
+export type InsertUserEvolutionIntegration = typeof userEvolutionIntegrations.$inferInsert;
+
 
 /**
  * Check-in Schedules - defines automatic check-in periods for tags
@@ -300,6 +316,29 @@ export const notificationGroups = pgTable("notification_groups", {
 
 export type NotificationGroup = typeof notificationGroups.$inferSelect;
 export type InsertNotificationGroup = typeof notificationGroups.$inferInsert;
+
+export const messageTemplates = pgTable("message_templates", {
+  id: serial("id").primaryKey(),
+  userId: uuid("user_id").notNull(),
+  name: text("name").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  userName: uniqueIndex("message_templates_user_id_name").on(table.userId, table.name),
+}));
+
+export type MessageTemplate = typeof messageTemplates.$inferSelect;
+export type InsertMessageTemplate = typeof messageTemplates.$inferInsert;
+
+export const broadcastSettings = pgTable("broadcast_settings", {
+  userId: uuid("user_id").primaryKey(),
+  delayMs: integer("delay_ms").notNull().default(0),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type BroadcastSetting = typeof broadcastSettings.$inferSelect;
+export type InsertBroadcastSetting = typeof broadcastSettings.$inferInsert;
 
 /**
  * Group-Schedule Relations - links groups to schedules

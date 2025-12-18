@@ -1,4 +1,4 @@
-import { eq, desc, sql, and, gte, lte, or, inArray, ilike, isNull } from "drizzle-orm";
+import { eq, desc, sql, and, gte, lte, lt, or, inArray, ilike, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { 
@@ -10,12 +10,15 @@ import {
   connectionLogs, InsertConnectionLog,
   dynamicLinks, InsertDynamicLink,
   deviceLinkActivations, DeviceLinkActivation, InsertDeviceLinkActivation,
+  userEvolutionIntegrations, UserEvolutionIntegration, InsertUserEvolutionIntegration,
   checkins, InsertCheckin,
   checkinSchedules, InsertCheckinSchedule,
   automaticCheckins, InsertAutomaticCheckin,
   userLocationUpdates, InsertUserLocationUpdate,
   scheduleTagRelations, InsertScheduleTagRelation,
   notificationGroups, InsertNotificationGroup, NotificationGroup,
+  messageTemplates, MessageTemplate, InsertMessageTemplate,
+  broadcastSettings, BroadcastSetting,
   groupScheduleRelations, InsertGroupScheduleRelation,
   groupUserRelations, InsertGroupUserRelation
 } from "../drizzle/schema";
@@ -170,6 +173,190 @@ export async function getUserByEmail(email: string) {
 
   const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
   return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getUserEvolutionIntegrationByUserId(userId: string) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db
+    .select()
+    .from(userEvolutionIntegrations)
+    .where(eq(userEvolutionIntegrations.userId, userId))
+    .limit(1);
+
+  return result[0] ?? null;
+}
+
+export async function saveUserEvolutionIntegration(input: {
+  userId: string;
+  instanceName: string;
+  connectionStatus?: string | null;
+  pairingCode?: string | null;
+  raw?: unknown;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const rawText =
+    input.raw == null
+      ? null
+      : typeof input.raw === "string"
+      ? input.raw
+      : JSON.stringify(input.raw);
+
+  await db.insert(userEvolutionIntegrations)
+    .values({
+      userId: input.userId,
+      instanceName: input.instanceName,
+      connectionStatus: input.connectionStatus ?? null,
+      pairingCode: input.pairingCode ?? null,
+      rawResponse: rawText,
+      createdAt: sql`now()`,
+      updatedAt: sql`now()`,
+    })
+    .onConflictDoUpdate({
+      target: userEvolutionIntegrations.userId,
+      set: {
+        instanceName: input.instanceName,
+        connectionStatus: input.connectionStatus ?? null,
+        pairingCode: input.pairingCode ?? null,
+        rawResponse: rawText,
+        updatedAt: sql`now()`,
+      },
+    });
+}
+
+export async function clearUserEvolutionIntegration(userId: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(userEvolutionIntegrations).where(eq(userEvolutionIntegrations.userId, userId));
+}
+
+export async function getMessageTemplatesByUserId(userId: string) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(messageTemplates)
+    .where(eq(messageTemplates.userId, userId))
+    .orderBy(desc(messageTemplates.createdAt));
+}
+
+export async function getMessageTemplateById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db
+    .select()
+    .from(messageTemplates)
+    .where(eq(messageTemplates.id, id))
+    .limit(1);
+
+  return result[0] ?? null;
+}
+
+export async function createMessageTemplate(input: {
+  userId: string;
+  name: string;
+  content: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(messageTemplates).values({
+    userId: input.userId,
+    name: input.name,
+    content: input.content,
+  }).returning();
+
+  return result[0];
+}
+
+export async function updateMessageTemplate(input: {
+  id: number;
+  userId: string;
+  name: string;
+  content: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const existing = await db
+    .select()
+    .from(messageTemplates)
+    .where(
+      and(eq(messageTemplates.id, input.id), eq(messageTemplates.userId, input.userId))
+    )
+    .limit(1);
+
+  if (!existing.length) throw new Error("Modelo não encontrado");
+
+  await db
+    .update(messageTemplates)
+    .set({
+      name: input.name,
+      content: input.content,
+      updatedAt: sql`now()`,
+    })
+    .where(eq(messageTemplates.id, input.id));
+
+  const [updated] = await db
+    .select()
+    .from(messageTemplates)
+    .where(eq(messageTemplates.id, input.id))
+    .limit(1);
+
+  return updated;
+}
+
+export async function deleteMessageTemplate(input: {
+  id: number;
+  userId: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .delete(messageTemplates)
+    .where(
+      and(eq(messageTemplates.id, input.id), eq(messageTemplates.userId, input.userId))
+    );
+}
+
+export async function getBroadcastSettingByUserId(userId: string) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db
+    .select()
+    .from(broadcastSettings)
+    .where(eq(broadcastSettings.userId, userId))
+    .limit(1);
+
+  return result[0] ?? null;
+}
+
+export async function upsertBroadcastSetting(input: {
+  userId: string;
+  delayMs: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.insert(broadcastSettings)
+    .values({
+      userId: input.userId,
+      delayMs: input.delayMs,
+    })
+    .onConflictDoUpdate({
+      target: broadcastSettings.userId,
+      set: {
+        delayMs: input.delayMs,
+        updatedAt: sql`now()`,
+      },
+    });
 }
 
 // ============ NFC TAG FUNCTIONS ============
@@ -355,6 +542,31 @@ export async function getAllNfcUsers() {
   .orderBy(desc(nfcUsers.createdAt));
   
   return result;
+}
+
+export async function searchNfcUsers(term: string, limit = 20) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const normalized = `%${term.replace(/%/g, "\\%")}%`;
+
+  return db
+    .select({
+      id: nfcUsers.id,
+      name: nfcUsers.name,
+      email: nfcUsers.email,
+      phone: nfcUsers.phone,
+    })
+    .from(nfcUsers)
+    .where(
+      or(
+        ilike(nfcUsers.name, normalized),
+        ilike(nfcUsers.email, normalized),
+        ilike(nfcUsers.phone, normalized)
+      )
+    )
+    .orderBy(desc(nfcUsers.createdAt))
+    .limit(limit);
 }
 
 export async function updateNfcUser(id: number, data: Partial<InsertNfcUser>) {
@@ -900,6 +1112,70 @@ export async function getAutomaticCheckinsByScheduleId(scheduleId: number, limit
     .where(eq(automaticCheckins.scheduleId, scheduleId))
     .orderBy(desc(automaticCheckins.createdAt))
     .limit(limit);
+}
+
+export async function getAutomaticCheckinsForScheduleDate(scheduleId: number, date: Date) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const startOfDay = new Date(date);
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date(date);
+  endOfDay.setHours(23, 59, 59, 999);
+
+  const results = await db
+    .select({
+      id: automaticCheckins.id,
+      nfcUserId: automaticCheckins.nfcUserId,
+      userName: nfcUsers.name,
+      userPhone: nfcUsers.phone,
+      scheduledDate: automaticCheckins.scheduledDate,
+      status: automaticCheckins.status,
+      deviceId: nfcUsers.deviceId,
+    })
+    .from(automaticCheckins)
+    .leftJoin(nfcUsers, eq(automaticCheckins.nfcUserId, nfcUsers.id))
+    .where(
+      and(
+        eq(automaticCheckins.scheduleId, scheduleId),
+        gte(automaticCheckins.scheduledDate, startOfDay),
+        lte(automaticCheckins.scheduledDate, endOfDay)
+      )
+    )
+    .orderBy(desc(automaticCheckins.createdAt));
+
+  return results.map(row => ({
+    id: row.id,
+    nfcUserId: row.nfcUserId,
+    userName: row.userName || null,
+    userPhone: row.userPhone || null,
+    deviceId: row.deviceId || null,
+    scheduledDate: row.scheduledDate,
+    status: row.status,
+  }));
+}
+
+export async function getFirstTimeAutomaticCheckinsForScheduleDate(scheduleId: number, date: Date) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const startOfDay = new Date(date);
+  startOfDay.setHours(0, 0, 0, 0);
+
+  const previousCheckins = await db
+    .select({ userId: automaticCheckins.nfcUserId })
+    .from(automaticCheckins)
+    .where(
+      and(
+        eq(automaticCheckins.scheduleId, scheduleId),
+        lt(automaticCheckins.scheduledDate, startOfDay)
+      )
+    )
+    .groupBy(automaticCheckins.nfcUserId);
+
+  const previousUserIds = new Set(previousCheckins.map(row => row.userId));
+  const todays = await getAutomaticCheckinsForScheduleDate(scheduleId, date);
+  return todays.filter(checkin => !previousUserIds.has(checkin.nfcUserId));
 }
 
 export async function updateAutomaticCheckinStatus(id: number, status: string, errorMessage?: string) {
@@ -2162,6 +2438,7 @@ export async function getGroupUsers(groupId: number) {
     userName: nfcUsers.name,
     userEmail: nfcUsers.email,
     userPhone: nfcUsers.phone,
+    deviceId: nfcUsers.deviceId,
   })
     .from(groupUserRelations)
     .leftJoin(nfcUsers, eq(groupUserRelations.nfcUserId, nfcUsers.id))

@@ -12,6 +12,8 @@ import {
 import { ENV } from '../_core/env';
 import { getAmazonTime } from '../utils/timezone';
 
+type CronJob = ReturnType<typeof cron.schedule>;
+
 // Helper function to get current date/time in Amazon timezone (UTC-4)
 // DEPRECATED: Use getAmazonTime() from utils/timezone instead
 function getCampoGrandeTime(): Date {
@@ -193,7 +195,7 @@ async function processAllActiveSchedules() {
     // Processar cada agendamento ativo
     for (const schedule of schedulesActiveNow) {
       
-      const result = await processScheduleCheckins(schedule.id, schedule.name);
+    const result = await processScheduleCheckins(schedule.id, schedule.name || "");
       
       totalProcessed += result.processed;
       totalSkipped += result.skipped;
@@ -228,12 +230,15 @@ export function startAutomaticCheckinCron() {
   console.log(`[Cron] Schedule: Every 10 minutes (${cronExpression})`);
   
   // Criar cron job
-  const job = cron.schedule(cronExpression, async () => {
-    await processAllActiveSchedules();
-  }, {
-    scheduled: true,
-    timezone: 'America/Manaus' // Amazon Standard Time (UTC-4)
-  });
+  const job = cron.schedule(
+    cronExpression,
+    async () => {
+      await processAllActiveSchedules();
+    },
+    {
+      timezone: 'America/Manaus',
+    }
+  );
   
   console.log('[Cron] Automatic check-in cron job started successfully');
   console.log('[Cron] Next execution will be in 10 minutes');
@@ -248,7 +253,7 @@ export function startAutomaticCheckinCron() {
 /**
  * Para o cron job (para testes ou shutdown)
  */
-export function stopAutomaticCheckinCron(job: cron.ScheduledTask) {
+export function stopAutomaticCheckinCron(job: CronJob) {
   console.log('[Cron] Stopping automatic check-in cron job...');
   job.stop();
   console.log('[Cron] Automatic check-in cron job stopped');

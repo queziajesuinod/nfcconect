@@ -9,7 +9,7 @@ import { TRPCError } from "@trpc/server";
 import { ENV } from "./_core/env";
 import {
   createNfcTag, getNfcTagByUid, getNfcTagById, getAllNfcTags, getNfcTagsPaginated, updateNfcTag, deleteNfcTag,
-  createNfcUser, getNfcUserByDeviceId, getNfcUserById, getAllNfcUsers, updateNfcUser, validateNfcUser, deleteNfcUser,
+  createNfcUser, getNfcUserByDeviceId, getNfcUserById, getAllNfcUsers, updateNfcUser, validateNfcUser, deleteNfcUser, searchNfcUsers,
   getUserTagRelation, createUserTagRelation, updateUserTagRelation, getAllNfcUsersByTagId, getTagsByUserId,
   createConnectionLog, getConnectionLogs, getConnectionLogsByTagId, getConnectionLogsByUserId,
   createDynamicLink, getDynamicLinkByShortCode, getDynamicLinkById, getDynamicLinksByUserId, getAllDynamicLinks, updateDynamicLink, incrementLinkClickCount, deleteDynamicLink,
@@ -29,6 +29,8 @@ import {
   isScheduleActive, calculateDistance
 } from "./db";
 import { getAmazonTime, nowInAmazonTime } from './utils/timezone';
+import { evolutionRouter } from "./routers/evolution";
+import { broadcastRouter } from "./routers/broadcast";
 
 // Helper function to get current date/time in Amazon timezone (UTC-4)
 // DEPRECATED: Use getAmazonTime() from utils/timezone instead
@@ -43,6 +45,8 @@ const adminProcedure = protectedProcedure;
 export const appRouter = router({
   system: systemRouter,
   auth: authRouter,
+  evolution: evolutionRouter,
+  broadcast: broadcastRouter,
 
   // ============ NFC TAG ROUTES ============
   tags: router({
@@ -396,6 +400,17 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         await deleteNfcUser(input.id);
         return { success: true };
+      }),
+    
+    search: adminProcedure
+      .input(
+        z.object({
+          term: z.string().min(1),
+          limit: z.number().min(1).max(50).default(20),
+        })
+      )
+      .query(async ({ input }) => {
+        return searchNfcUsers(input.term, input.limit);
       }),
   }),
 
