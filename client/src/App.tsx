@@ -12,6 +12,7 @@ import Users from "./pages/Users";
 import Logs from "./pages/Logs";
 import Links from "./pages/Links";
 import NfcRegister from "./pages/NfcRegister";
+import MemberRegister from "./pages/MemberRegister";
 import LinkRedirect from "./pages/LinkRedirect";
 import Checkins from "./pages/Checkins";
 import Schedules from "./pages/Schedules";
@@ -34,6 +35,7 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
       <Route path="/nfc" component={NfcRegister} />
+      <Route path="/member-register" component={MemberRegister} />
       <Route path="/l/:shortCode" component={LinkRedirect} />
       <Route path="/app" component={UserApp} />
       

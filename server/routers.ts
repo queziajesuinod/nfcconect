@@ -1,4 +1,4 @@
-import { COOKIE_NAME } from "@shared/const";
+import { DEFAULT_MEMBER_PERFIL_ID } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
@@ -26,6 +26,7 @@ import {
   addScheduleToGroup, removeScheduleFromGroup, getGroupSchedules, getScheduleGroups,
   addUserToGroup, removeUserFromGroup, getGroupUsers, getUserGroups, getGroupStats, getAllGroupsWithStats, getGroupsWithStatsPaginated,
   autoAddUserToScheduleGroups, getGroupRedirectUrlForUser,
+  findUserByIdentifier, createMemberUser,
   isScheduleActive, calculateDistance
 } from "./db";
 import { getAmazonTime, nowInAmazonTime } from './utils/timezone';
@@ -77,6 +78,76 @@ function formatRedirectUrl(
     const normalized = key.trim();
     return values[normalized] ?? values[normalized.toLowerCase()] ?? "";
   });
+}
+
+type MemberProfile = {
+  name?: string | null;
+  email?: string | null;
+  telefone?: string | null;
+};
+
+async function linkMemberDeviceToTag(input: {
+  tagId: number;
+  deviceId: string;
+  member: MemberProfile;
+  deviceInfo?: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  latitude?: string | null;
+  longitude?: string | null;
+  metadata?: Record<string, unknown>;
+}) {
+  let nfcUser = await getNfcUserByDeviceId(input.deviceId);
+  const updateData: Parameters<typeof updateNfcUser>[1] = {
+    lastConnectionAt: nowInAmazonTime(),
+    ipAddress: input.ipAddress ?? null,
+    userAgent: input.userAgent ?? null,
+  };
+
+  if (input.deviceInfo) updateData.deviceInfo = input.deviceInfo;
+  if (input.member.name) updateData.name = input.member.name;
+  if (input.member.email) updateData.email = input.member.email;
+  if (input.member.telefone) updateData.phone = input.member.telefone;
+
+  let created = false;
+
+  if (nfcUser) {
+    await updateNfcUser(nfcUser.id, updateData);
+  } else {
+    const createData: Parameters<typeof createNfcUser>[0] = {
+      deviceId: input.deviceId,
+      name: input.member.name || null,
+      email: input.member.email || null,
+      phone: input.member.telefone || null,
+      deviceInfo: input.deviceInfo ?? null,
+      ipAddress: input.ipAddress ?? null,
+      userAgent: input.userAgent ?? null,
+      registrationLatitude: input.latitude ?? null,
+      registrationLongitude: input.longitude ?? null,
+    };
+    nfcUser = await createNfcUser(createData);
+    created = true;
+  }
+
+  const relation = await getUserTagRelation(nfcUser.id, input.tagId);
+  if (relation) {
+    await updateUserTagRelation(nfcUser.id, input.tagId);
+  } else {
+    await createUserTagRelation(nfcUser.id, input.tagId);
+  }
+
+  await createConnectionLog({
+    tagId: input.tagId,
+    nfcUserId: nfcUser.id,
+    action: relation ? "validation" : "first_read",
+    ipAddress: input.ipAddress ?? null,
+    userAgent: input.userAgent ?? null,
+    latitude: input.latitude ?? null,
+    longitude: input.longitude ?? null,
+    metadata: input.metadata ? JSON.stringify(input.metadata) : null,
+  });
+
+  return { nfcUser, created };
 }
 
 const adminProcedure = protectedProcedure;
@@ -272,6 +343,157 @@ export const appRouter = router({
         }
         
         return { exists: false, tag, user: null, redirectUrl: null };
+      }),
+
+    lookupMember: publicProcedure
+      .input(z.object({
+        tagUid: z.string().min(1),
+        deviceId: z.string().min(1),
+        identifier: z.string().min(1),
+        deviceInfo: z.string().optional(),
+        userAgent: z.string().optional(),
+        latitude: z.string().optional(),
+        longitude: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        let tag = await getNfcTagByUid(input.tagUid);
+        if (!tag) {
+          const result = await createNfcTag({ uid: input.tagUid });
+          tag = await getNfcTagById(result.id);
+        }
+
+        if (!tag) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Erro ao criar tag' });
+
+        if (tag.status === 'blocked') {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Esta tag estÇ­ bloqueada' });
+        }
+
+        const member = await findUserByIdentifier(input.identifier);
+        if (!member) {
+          return { exists: false, tag, user: null, redirectUrl: null };
+        }
+
+        const ipAddress = ctx.req.ip || ctx.req.headers['x-forwarded-for'] as string || null;
+        const userAgent = input.userAgent || ctx.req.headers['user-agent'] || null;
+
+        const { nfcUser } = await linkMemberDeviceToTag({
+          tagId: tag.id,
+          deviceId: input.deviceId,
+          member: {
+            name: member.name ?? null,
+            email: member.email ?? null,
+            telefone: member.telefone ?? null,
+          },
+          deviceInfo: input.deviceInfo ?? null,
+          ipAddress,
+          userAgent,
+          latitude: input.latitude ?? null,
+          longitude: input.longitude ?? null,
+          metadata: {
+            source: "member_lookup",
+            memberId: member.id,
+          },
+        });
+
+        const activeLink = await getActiveDeviceLink(input.deviceId, tag.id);
+
+        if (activeLink?.linkId) {
+          await incrementLinkClickCount(activeLink.linkId);
+        }
+
+        const redirectUrl = formatRedirectUrl(
+          activeLink?.targetUrl || tag.redirectUrl,
+          buildRedirectTemplateUser(nfcUser),
+          input.deviceId
+        );
+
+        return {
+          exists: true,
+          tag,
+          user: nfcUser,
+          redirectUrl,
+        };
+      }),
+
+    registerMember: publicProcedure
+      .input(z.object({
+        tagUid: z.string().min(1),
+        deviceId: z.string().min(1),
+        name: z.string().min(2),
+        email: z.string().email(),
+        phone: z.string().optional(),
+        cpf: z.string().optional(),
+        deviceInfo: z.string().optional(),
+        userAgent: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        let tag = await getNfcTagByUid(input.tagUid);
+        if (!tag) {
+          const result = await createNfcTag({ uid: input.tagUid });
+          tag = await getNfcTagById(result.id);
+        }
+
+        if (!tag) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Erro ao criar tag' });
+
+        if (tag.status === 'blocked') {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Esta tag estÇ­ bloqueada' });
+        }
+
+        let member;
+        try {
+          member = await createMemberUser({
+            name: input.name,
+            email: input.email,
+            telefone: input.phone ?? null,
+            cpf: input.cpf ?? null,
+            perfilId: DEFAULT_MEMBER_PERFIL_ID,
+          });
+        } catch (error) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: (error as Error).message || "NÇœo foi possÇðvel cadastrar o usuÇ­rio",
+          });
+        }
+
+        const ipAddress = ctx.req.ip || ctx.req.headers['x-forwarded-for'] as string || null;
+        const userAgent = input.userAgent || ctx.req.headers['user-agent'] || null;
+
+        const { nfcUser } = await linkMemberDeviceToTag({
+          tagId: tag.id,
+          deviceId: input.deviceId,
+          member: {
+            name: member.name ?? null,
+            email: member.email ?? null,
+            telefone: member.telefone ?? null,
+          },
+          deviceInfo: input.deviceInfo ?? null,
+          ipAddress,
+          userAgent,
+          metadata: {
+            source: "member_register",
+            memberId: member.id,
+          },
+        });
+
+        const activeLink = await getActiveDeviceLink(input.deviceId, tag.id);
+
+        if (activeLink?.linkId) {
+          await incrementLinkClickCount(activeLink.linkId);
+        }
+
+        const redirectUrl = formatRedirectUrl(
+          activeLink?.targetUrl || tag.redirectUrl,
+          buildRedirectTemplateUser(nfcUser),
+          input.deviceId
+        );
+
+        return {
+          success: true,
+          memberId: member.id,
+          user: nfcUser,
+          tagId: tag.id,
+          redirectUrl,
+        };
       }),
 
     // Public endpoint for first NFC connection registration

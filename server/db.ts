@@ -175,6 +175,110 @@ export async function getUserByEmail(email: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
+function normalizeDigits(value: string | null | undefined) {
+  return value ? value.replace(/\D/g, "") : "";
+}
+
+export async function findUserByIdentifier(identifier: string) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot search users: database not available");
+    return null;
+  }
+
+  const term = identifier.trim();
+  if (!term) return null;
+
+  const digits = normalizeDigits(term);
+  const conditions = [];
+  const hasAt = term.includes("@");
+  const hasLetters = /[a-zA-Z]/.test(term);
+
+  if (hasAt) {
+    conditions.push(ilike(users.email, term));
+  } else if (hasLetters) {
+    conditions.push(ilike(users.email, `%${term}%`));
+  }
+
+  if (!hasAt && digits) {
+    const digitsLike = `%${digits}%`;
+    conditions.push(ilike(users.telefone, digitsLike));
+    conditions.push(ilike(users.cpf, digitsLike));
+
+    if (term !== digits) {
+      const rawLike = `%${term}%`;
+      conditions.push(ilike(users.telefone, rawLike));
+      conditions.push(ilike(users.cpf, rawLike));
+    }
+  }
+
+  if (!conditions.length) return null;
+
+  const result = await db
+    .select()
+    .from(users)
+    .where(or(...conditions))
+    .limit(1);
+
+  return result[0] ?? null;
+}
+
+export async function createMemberUser(input: {
+  name: string;
+  email: string;
+  telefone?: string | null;
+  cpf?: string | null;
+  perfilId?: string | null;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const name = input.name.trim();
+  const email = input.email.trim().toLowerCase();
+  const telefone = input.telefone?.trim() || null;
+  const cpf = input.cpf?.trim() || null;
+
+  const telefoneDigits = normalizeDigits(telefone);
+  const cpfDigits = normalizeDigits(cpf);
+
+  const conditions = [ilike(users.email, email)];
+
+  if (telefoneDigits) {
+    conditions.push(ilike(users.telefone, `%${telefoneDigits}%`));
+    if (telefone && telefone !== telefoneDigits) {
+      conditions.push(ilike(users.telefone, `%${telefone}%`));
+    }
+  }
+
+  if (cpfDigits) {
+    conditions.push(ilike(users.cpf, `%${cpfDigits}%`));
+    if (cpf && cpf !== cpfDigits) {
+      conditions.push(ilike(users.cpf, `%${cpf}%`));
+    }
+  }
+
+  const existing = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(or(...conditions))
+    .limit(1);
+
+  if (existing.length) {
+    throw new Error("Usuario ja cadastrado");
+  }
+
+  const result = await db.insert(users).values({
+    name,
+    email,
+    telefone,
+    cpf,
+    perfilId: input.perfilId ?? null,
+    active: true,
+  }).returning();
+
+  return result[0];
+}
+
 export async function getUserEvolutionIntegrationByUserId(userId: string) {
   const db = await getDb();
   if (!db) return null;
